@@ -13,12 +13,13 @@ async function main() {
 
     // fsm-specific options
     defaultGameOptions: {
-      questionTime: 8000,
+      questionTime: 15000,
       timeBetweenQuestions: 2000,
       timeBetweenRounds: 4000,
       autoPickQuestions: true,
       gameRounds: 2,
       useFinalRound: false,
+      guessesPerQuestion: 1,
     },
 
     states: {
@@ -30,7 +31,13 @@ async function main() {
 
         '*': function(game) {
           game.options = {...this.defaultGameOptions, ...game.options};
-          game.round = 0;
+          game.data = {
+            round: 0,
+            board: {},
+            scores: {},
+            question: null,
+            questionsLeft: 3
+          };
           this.transition(game, 'roundStart')
         }
       },
@@ -40,9 +47,9 @@ async function main() {
         _onEnter: async function(game) {
           console.log('round entered, doing some long stuff');
           await delay(2000);
-          game.board = {};
-          game.round += 1;
-          game.cluesLeft = 3;
+          game.data.board = {};
+          game.data.round += 1;
+          game.data.questionsLeft = 3;
           console.log('long stuff done');
           this.transition(game, 'selectQuestion');
         },
@@ -55,14 +62,21 @@ async function main() {
       // pick a question from the board based on random or input
       selectQuestion: {
         _onEnter: function(game) {
+          game.data.question = null;
+
           if (game.options.autoPickQuestions) {
             this.handle(game, 'chooseQuestion', 1, 1);
           }
         },
 
+        _onExit: function(game) {
+          game.data.guesses = {};
+        },
+
         // handle and validate question selection
         chooseQuestion: function(game, category, level) {
-          this.emit('questionSelected', {game, category, level});
+          game.data.question = {category, level, question: 'abc', answer: 'def'};
+          this.emit('questionSelected', game);
           this.transition(game, 'askQuestion');
         }
       },
@@ -79,11 +93,28 @@ async function main() {
         },
 
         // handle guesses from player
-        guess: function(game, guess) {
-          if (Math.random() > 0.5) {
+        guess: function(game, player, guess) {
+          const d = game.data;
+
+          if (!d.scores[player]) {
+            d.scores[player] = 0;
+          }
+
+          if (!d.guesses[player]) {
+            d.guesses[player] = 0;
+          }
+
+          if (d.guesses[player] >= game.options.guessesPerQuestion) {
+            return;
+          }
+
+          if (guess === d.question.answer) {
+            d.scores[player] += d.question.level * d.round * 200;
             this.emit('rightAnswer', game);
             this.transition(game, 'questionOver');
           } else {
+            d.scores[player] -= d.question.level * d.round * 200;
+            d.guesses[player] += 1;
             this.emit('wrongAnswer', game);
           }
         }
@@ -100,8 +131,8 @@ async function main() {
       questionOver: {
         _onEnter: async function(game) {
           // if the board is empty, move on to the next round
-          game.cluesLeft -= 1;
-          if (game.cluesLeft === 0) {
+          game.data.questionsLeft -= 1;
+          if (game.data.questionsLeft === 0) {
             this.transition(game, 'roundOver');
           } else {
             // otherwise, move on to the next question
@@ -116,7 +147,7 @@ async function main() {
           this.emit('roundOver', game);
           // check if we need to move into final jeopardy
           await delay(game.options.timeBetweenRounds);
-          if (game.round === game.options.gameRounds) {
+          if (game.data.round === game.options.gameRounds) {
             if (game.options.useFinalRound) {
               // move into final round
             } else {
@@ -141,8 +172,8 @@ async function main() {
       this.handle(game, 'start');
     },
 
-    Guess: function(game, guess) {
-      this.handle(game, 'guess');
+    Guess: function(game, player, guess) {
+      this.handle(game, 'guess', player, guess);
     }
 
   });
@@ -161,10 +192,12 @@ async function main() {
 
   JepFsm.on('rightAnswer', ev => {
     console.log('Wow You Are Smarter, Much Smarter Than My Ex-Wife!', ev);
+    console.log(JSON.stringify(ev.data.scores));
   })
 
   JepFsm.on('wrongAnswer', ev => {
     console.log("You Fool!", ev);
+    console.log(JSON.stringify(ev.data.scores));
   })
 
   JepFsm.on('noAnswer', ev => {
@@ -179,10 +212,10 @@ async function main() {
     console.log("Thank's For Playing!", ev);
   });
 
-  const game = {'players': []};
+  const game = {channel: 123456};
   JepFsm.Start(game);
 
-  // global.jep.Guess(global.game, 'hello')
+  // global.jep.Guess(global.game, 'sponge', 'hello')
   global.game = game;
   global.jep = JepFsm;
 }
