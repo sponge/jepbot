@@ -36,7 +36,7 @@ async function main() {
       // setup game options and kick off the game
       new: {
         _onExit: function(game) {
-          this.emit('gameStart');
+          this.emit('gameStart', {game});
         },
 
         '*': function(game) {
@@ -65,7 +65,7 @@ async function main() {
         },
 
         _onExit: function(game) {
-          this.emit('roundStart');
+          this.emit('roundStart', {game});
         }
       },
 
@@ -86,7 +86,7 @@ async function main() {
         // handle and validate question selection
         chooseQuestion: function(game, category, level) {
           game.data.question = {category, level, question: 'abc', answer: 'defdefdef'};
-          this.emit('questionSelected', game);
+          this.emit('questionSelected', {game});
           this.transition(game, 'askQuestion');
         }
       },
@@ -120,12 +120,12 @@ async function main() {
 
           if (closeEnough(guess, d.question.answer, game.options.answerSimilarity)) {
             d.scores[player] += d.question.level * d.round * 200;
-            this.emit('rightAnswer', game);
+            this.emit('rightAnswer', {game});
             this.transition(game, 'questionOver');
           } else {
             d.scores[player] -= d.question.level * d.round * 200;
             d.guesses[player] += 1;
-            this.emit('wrongAnswer', game);
+            this.emit('wrongAnswer', {game});
           }
         }
       },
@@ -133,7 +133,7 @@ async function main() {
       // nobody guessed the answer in time. emit an event so we can print a message out and move on
       noAnswer: {
         _onEnter: function(game) {
-          this.emit('noAnswer', game);
+          this.emit('noAnswer', {game});
           this.transition(game, 'questionOver');
         }
       },
@@ -154,7 +154,7 @@ async function main() {
 
       roundOver: {
         _onEnter: async function(game) {
-          this.emit('roundOver', game);
+          this.emit('roundOver', {game});
           // check if we need to move into final jeopardy
           await delay(game.options.timeBetweenRounds);
           if (game.data.round === game.options.gameRounds) {
@@ -171,7 +171,7 @@ async function main() {
 
       gameOver: {
         _onEnter: function(game) {
-          this.emit('gameOver', game);
+          this.emit('gameOver', {game});
         }
       }
     },
@@ -202,12 +202,12 @@ async function main() {
 
   JepFsm.on('rightAnswer', ev => {
     console.log('Wow You Are Smarter, Much Smarter Than My Ex-Wife!', ev);
-    console.log(JSON.stringify(ev.data.scores));
+    console.log(JSON.stringify(ev.game.data.scores));
   })
 
   JepFsm.on('wrongAnswer', ev => {
     console.log("You Fool!", ev);
-    console.log(JSON.stringify(ev.data.scores));
+    console.log(JSON.stringify(ev.game.data.scores));
   })
 
   JepFsm.on('noAnswer', ev => {
