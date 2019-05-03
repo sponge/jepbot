@@ -2,13 +2,19 @@ import sqlite from 'sqlite';
 import machina from 'machina';
 import delay from 'delay';
 import distance from 'damerau-levenshtein';
+import _ from 'lodash';
 
+// drop all whitespace, and all symbols, and make lower case
 function closeEnough(a, b, similarity) {
+  return trimmedSimilarity(a, b).similarity >= similarity;
+}
+
+function trimmedSimilarity(a,b) {
   const regex = /\s|\W/gm;
   const trim_a = a.replace(regex, '').toLowerCase();
   const trim_b = b.replace(regex, '').toLowerCase();
   const score = distance(trim_a, trim_b);
-  return score.similarity >= similarity;
+  return score; 
 }
 
 async function main() {
@@ -23,17 +29,19 @@ async function main() {
 
     // fsm-specific options
     defaultGameOptions: {
-      questionTime: 15000,
-      timeBetweenQuestions: 2000,
-      timeBetweenRounds: 4000,
-      autoPickQuestions: true,
-      gameRounds: 2,
-      useFinalRound: false,
-      guessesPerQuestion: 1,
-      answerSimilarity: 0.7,
+      questionTime: 15000,            // how long players have to answer the question
+      timeBetweenQuestions: 4000,     // how long in between question answer/timeout and the next question selection
+      timeBetweenRounds: 8000,        // how long in between rounds
+      autoPickQuestions: true,        // randomly choose questions in a round, or let players choose them
+      gameRounds: 2,                  // how many regular rounds in a game
+      playFinalRound: false,          // run the final round after gameRounds rounds are complete
+      guessesPerQuestion: 1,          // let players guess multiple times per question
+      answerSimilarity: 0.7,          // how close do answers need to be to be correct, uses damerau-lecenshtein string distance
+      numCategoriesPerRound: 6,       // number of categories selected per round
     },
 
     states: {
+
       // setup game options and kick off the game
       new: {
         _onExit: function(game) {
@@ -44,11 +52,14 @@ async function main() {
           game.options = {...this.defaultGameOptions, ...game.options};
           game.data = {
             round: 0,
-            board: {},
+            categories: [],
+            board: [],
             scores: {},
             question: null,
-            questionsLeft: 3
+            questionsLeft: 0,
+            timer: 0
           };
+
           this.transition(game, 'roundStart')
         }
       },
@@ -56,17 +67,36 @@ async function main() {
       // a new round has started, fill up the board with questions
       roundStart: {
         _onEnter: async function(game) {
-          console.log('round entered, doing some long stuff');
-          await delay(2000);
-          game.data.board = {};
-          game.data.round += 1;
-          game.data.questionsLeft = 3;
-          console.log('long stuff done');
+          const gd = game.data;
+          gd.round += 1;
+
+          // select a random x categories from the db, then select all the clues in that category
+          const results = await db.all(`
+          SELECT a.* FROM clues a
+          INNER JOIN 
+            (SELECT DISTINCT category, game_id FROM clues WHERE round = ? AND airdate >= DATE('now', 'start of year', '-1 year') ORDER BY RANDOM() LIMIT ?) AS b
+          ON a.category = b.category AND a.game_id = b.game_id
+          `, gd.round, game.options.numCategoriesPerRound);
+
+          // get a list of our categories
+          gd.categories = _.uniq(results.map(o => o.category));
+
+          // make empty arrays for each of our board cells and add the questions to them
+          gd.board = gd.categories.map(o => []);
+          results.forEach(clue => {
+            const idx = gd.categories.indexOf(clue.category);
+            gd.board[idx].push({...clue, enabled: true, cost: gd.round * clue.level * 200});
+          });
+
+          // for easier tracking
+          gd.questionsLeft = results.length;
+
+          // round is setup, move to select question phase
           this.transition(game, 'selectQuestion');
         },
 
         _onExit: function(game) {
-          this.emit('roundStart', {game});
+          this.emit('roundStart', {game, round: game.data.round});
         }
       },
 
@@ -75,27 +105,45 @@ async function main() {
         _onEnter: function(game) {
           game.data.question = null;
 
+          // if auto pick is on, find a question still active and just ask it immediately
           if (game.options.autoPickQuestions) {
-            this.handle(game, 'chooseQuestion', 1, 1);
+            const questions = _.flatten(game.data.board).filter(clue => !clue.active);
+            const choice = _.sample(questions);
+
+            this.handle(game, 'chooseQuestion', choice.category, choice.level);
           }
         },
 
         _onExit: function(game) {
-          game.data.guesses = {};
+          this.emit('questionSelected', {game, question: game.data.question});
         },
 
-        // handle and validate question selection
-        chooseQuestion: function(game, category, level) {
-          game.data.question = global.clues[Math.floor(Math.random()*global.clues.length)];
-          this.emit('questionSelected', {game});
+        // handle and validate question selection. category is the exact string of the
+        // category of the question, level is 1-5
+        chooseQuestion: function(game, category, level, player) {
+          const idx = game.data.categories.indexOf(category);
+
+          if (idx == -1 || level < 1 || level > 5) {
+            return;
+          }
+
+          const question = game.data.board[idx][level - 1];
+
+          if (!question.enabled) {
+            return;
+          }
+
+          // question is valid, move on to asking it
+          game.data.question = question;
           this.transition(game, 'askQuestion');
         }
       },
 
       // ask the question, and handle input for answers/question timeout
       askQuestion: {
-        // setup question timeout
         _onEnter: function(game) {
+          game.data.guesses = {};
+          // setup question timeout if no one answers in time
           game.timer = setTimeout(() => this.transition(game, 'noAnswer'), game.options.questionTime);
         },
 
@@ -107,24 +155,28 @@ async function main() {
         guess: function(game, player, guess) {
           const d = game.data;
 
+          // if they're a new player, set them up
           if (!d.scores[player]) {
             d.scores[player] = 0;
           }
 
+          // if they haven't guessed yet, set them up for this question
           if (!d.guesses[player]) {
             d.guesses[player] = 0;
           }
 
+          // too many guesses
           if (d.guesses[player] >= game.options.guessesPerQuestion) {
             return;
           }
 
+          // check answer correctness
           if (closeEnough(guess, d.question.answer, game.options.answerSimilarity)) {
-            d.scores[player] += d.question.level * d.round * 200;
-            this.emit('rightAnswer', {game, player, guess});
+            d.scores[player] += d.question.cost;
+            this.emit('rightAnswer', {game, player});
             this.transition(game, 'questionOver');
           } else {
-            d.scores[player] -= d.question.level * d.round * 200;
+            d.scores[player] -= d.question.cost;
             d.guesses[player] += 1;
             this.emit('wrongAnswer', {game, player, guess});
           }
@@ -160,7 +212,7 @@ async function main() {
           // check if we need to move into final jeopardy
           await delay(game.options.timeBetweenRounds);
           if (game.data.round === game.options.gameRounds) {
-            if (game.options.useFinalRound) {
+            if (game.options.playFinalRound) {
               // move into final round
             } else {
               this.transition(game, 'gameOver');
@@ -188,9 +240,47 @@ async function main() {
       this.handle(game, 'guess', player, guess);
     },
 
+    ChooseQuestion: function(game, category, level, player) {
+      this.handle(game, 'chooseQuestion', category, level, player);
+    },
+
     Command: function(game, player, command) {
+      // if the line is in the form of a question, pass it into the fsm as a guess
+      const matchGuess = /(?:who|what|when|where)\s*(?:is|was|are)\s*(.*)/gmi.exec(command);
+      if (matchGuess && matchGuess.length == 2) {
+        this.Guess(game, player, matchGuess[1]);
+        return;
+      }
+
       // if command contains "for" see if words before are a category and after is a number, handle as category selection
-      // if command starts with (who|what) (is|are|was), handle it as a guess
+      if (!game.options.autoPickQuestions) {
+        const matchSelection = /(.*) for \$?(\d*)/gmi.exec(command);
+        if (!matchSelection) {
+          return;
+        }
+
+        const playerCategory = matchSelection[1];
+        const categoryNum = parseInt(playerCategory);
+        const amount = parseInt(matchSelection[2], 10);
+        const level = amount / game.data.round / 200;
+
+        if (isNaN(amount)) {
+          return;
+        }
+
+        if (isNaN(categoryNum)) {
+          const distances = game.data.categories
+            .map(category => [category, trimmedSimilarity(playerCategory, category)])
+            .sort((a,b) => b[1].similarity - a[1].similarity);
+
+          if (distances[0][1].similarity >= 0.5) {
+            this.ChooseQuestion(game, ggame.data.categories.indexOf(distances[0][0]), level);
+          }
+        } else {
+          this.ChooseQuestion(game, game.data.categories[categoryNum - 1], level);
+        }
+      }
+
     }
 
   });
@@ -205,7 +295,7 @@ async function main() {
 
   JepFsm.on('questionSelected', ev => {
     console.log("Get A Load Of This One. It's A Real Thinker:", ev);
-    console.log(`${ev.game.data.question.category}\n${ev.game.data.question.question}\n(answer: ${ev.game.data.question.answer})`);
+    console.log(`${ev.question.category}\n$${ev.question.cost}\n${ev.question.question}\n(answer: ${ev.question.answer})`);
   });
 
   JepFsm.on('rightAnswer', ev => {
