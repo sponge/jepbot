@@ -120,12 +120,12 @@ async function main() {
 
           if (closeEnough(guess, d.question.answer, game.options.answerSimilarity)) {
             d.scores[player] += d.question.level * d.round * 200;
-            this.emit('rightAnswer', {game});
+            this.emit('rightAnswer', {game, player, guess});
             this.transition(game, 'questionOver');
           } else {
             d.scores[player] -= d.question.level * d.round * 200;
             d.guesses[player] += 1;
-            this.emit('wrongAnswer', {game});
+            this.emit('wrongAnswer', {game, player, guess});
           }
         }
       },
@@ -198,20 +198,24 @@ async function main() {
 
   JepFsm.on('questionSelected', ev => {
     console.log("Get A Load Of This One. It's A Real Thinker:", ev);
+    console.log(JSON.stringify(ev.game.data.question));
   });
 
   JepFsm.on('rightAnswer', ev => {
     console.log('Wow You Are Smarter, Much Smarter Than My Ex-Wife!', ev);
+    console.log(`${ev.player} guessed ${ev.game.data.question.answer} right`);
     console.log(JSON.stringify(ev.game.data.scores));
   })
 
   JepFsm.on('wrongAnswer', ev => {
     console.log("You Fool!", ev);
+    console.log(`player ${ev.player} guessed "${ev.guess} wrong"`);
     console.log(JSON.stringify(ev.game.data.scores));
   })
 
   JepFsm.on('noAnswer', ev => {
     console.log('Stumped Ya Good, Ya Dingus', ev);
+    console.log(`answer was ${ev.game.data.question.answer}`);
   });
 
   JepFsm.on('roundOver', ev => {
