@@ -15,6 +15,7 @@ async function main() {
   const db = await sqlite.open('./clues.db', { Promise });
   const clues = await db.all("select * from clues where airdate >= date('now','start of year','-1 year')");
   console.log(clues.length);
+  global.clues = clues;
 
   const JepFsm = new machina.BehavioralFsm({
     namespace: 'jep',
@@ -85,7 +86,7 @@ async function main() {
 
         // handle and validate question selection
         chooseQuestion: function(game, category, level) {
-          game.data.question = {category, level, question: 'abc', answer: 'defdefdef'};
+          game.data.question = global.clues[Math.floor(Math.random()*global.clues.length)];
           this.emit('questionSelected', {game});
           this.transition(game, 'askQuestion');
         }
@@ -141,6 +142,7 @@ async function main() {
       questionOver: {
         _onEnter: async function(game) {
           // if the board is empty, move on to the next round
+          game.data.question = null;
           game.data.questionsLeft -= 1;
           if (game.data.questionsLeft === 0) {
             this.transition(game, 'roundOver');
@@ -184,6 +186,11 @@ async function main() {
 
     Guess: function(game, player, guess) {
       this.handle(game, 'guess', player, guess);
+    },
+
+    Command: function(game, player, command) {
+      // if command contains "for" see if words before are a category and after is a number, handle as category selection
+      // if command starts with (who|what) (is|are|was), handle it as a guess
     }
 
   });
@@ -198,7 +205,7 @@ async function main() {
 
   JepFsm.on('questionSelected', ev => {
     console.log("Get A Load Of This One. It's A Real Thinker:", ev);
-    console.log(JSON.stringify(ev.game.data.question));
+    console.log(`${ev.game.data.question.category}\n${ev.game.data.question.question}\n(answer: ${ev.game.data.question.answer})`);
   });
 
   JepFsm.on('rightAnswer', ev => {
