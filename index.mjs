@@ -1,6 +1,15 @@
 import sqlite from 'sqlite';
 import machina from 'machina';
 import delay from 'delay';
+import distance from 'damerau-levenshtein';
+
+function closeEnough(a, b, similarity) {
+  const regex = /\s|\W/gm;
+  const trim_a = a.replace(regex, '').toLowerCase();
+  const trim_b = b.replace(regex, '').toLowerCase();
+  const score = distance(trim_a, trim_b);
+  return score.similarity >= similarity;
+}
 
 async function main() {
   const db = await sqlite.open('./clues.db', { Promise });
@@ -20,6 +29,7 @@ async function main() {
       gameRounds: 2,
       useFinalRound: false,
       guessesPerQuestion: 1,
+      answerSimilarity: 0.7,
     },
 
     states: {
@@ -75,7 +85,7 @@ async function main() {
 
         // handle and validate question selection
         chooseQuestion: function(game, category, level) {
-          game.data.question = {category, level, question: 'abc', answer: 'def'};
+          game.data.question = {category, level, question: 'abc', answer: 'defdefdef'};
           this.emit('questionSelected', game);
           this.transition(game, 'askQuestion');
         }
@@ -108,7 +118,7 @@ async function main() {
             return;
           }
 
-          if (guess === d.question.answer) {
+          if (closeEnough(guess, d.question.answer, game.options.answerSimilarity)) {
             d.scores[player] += d.question.level * d.round * 200;
             this.emit('rightAnswer', game);
             this.transition(game, 'questionOver');
