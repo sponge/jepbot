@@ -85,11 +85,10 @@ async function main() {
         game.channel.send(embed);      
       } else {
         const valid = JepFSM.Command(games[msg.channel.id], msg.author.id, msg.content);
-        console.log(valid);
         if (valid === true) {
           msg.react('✅');
         } else if (valid === false) {
-          msg.react('❌');
+          msg.react('❓');
         }
       }
     }
@@ -114,7 +113,7 @@ async function main() {
     }
     
     const user = await client.fetchUser(ev.player);
-    board += `${user}, you're in control. Select a category by saying (number) for (value).`;
+    board += `${user}, you're in control. Select a category by saying "(number) for (value)."`;
 
     // don't show scores if its the start of round 1
     if ((ev.game.data.questionsAsked === 0 && ev.game.data.round === 1) === false) {
@@ -144,7 +143,7 @@ async function main() {
   })
 
   JepFSM.on('noAnswer', ev => {
-    const embed = simpleEmbed("Time's up!", `The answer was "${ev.question.answer}"`);
+    const embed = simpleEmbed("Time's up!", `The answer is "${ev.question.answer}"`);
     ev.game.channel.send(embed);
   });
 
@@ -155,6 +154,8 @@ async function main() {
   });
 
   JepFSM.on('gameOver', async ev => {
+    delete games[ev.game.channel];
+
     const scores = await renderScores(client, JepFSM, ev.game);
     const embed = simpleEmbed('Game Over!', `${scores}\nThanks for playing!`);
     ev.game.channel.send(embed);
