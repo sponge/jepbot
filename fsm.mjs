@@ -17,13 +17,13 @@ function trimmedSimilarity(a,b) {
   return score; 
 }
 
-async function main() {
+async function GetGameFSM() {
   const db = await sqlite.open('./clues.db', { Promise });
   const clues = await db.all("select * from clues where airdate >= date('now','start of year','-1 year')");
   console.log(clues.length);
   global.clues = clues;
 
-  const JepFsm = new machina.BehavioralFsm({
+  return new machina.BehavioralFsm({
     namespace: 'jep',
     initialState: 'new',
 
@@ -284,51 +284,6 @@ async function main() {
     }
 
   });
-
-  JepFsm.on('gameStart', ev => {
-    console.log("Lettuce Start Because I'm Hungry To Play!!!");
-  });
-
-  JepFsm.on('roundStart', ev => {
-    console.log("We've Got A Hot Board Of Questions For You!!!");
-  });
-
-  JepFsm.on('questionSelected', ev => {
-    console.log("Get A Load Of This One. It's A Real Thinker:", ev);
-    console.log(`${ev.question.category}\n$${ev.question.cost}\n${ev.question.question}\n(answer: ${ev.question.answer})`);
-  });
-
-  JepFsm.on('rightAnswer', ev => {
-    console.log('Wow You Are Smarter, Much Smarter Than My Ex-Wife!', ev);
-    console.log(`${ev.player} guessed ${ev.game.data.question.answer} right`);
-    console.log(JSON.stringify(ev.game.data.scores));
-  })
-
-  JepFsm.on('wrongAnswer', ev => {
-    console.log("You Fool!", ev);
-    console.log(`player ${ev.player} guessed "${ev.guess} wrong"`);
-    console.log(JSON.stringify(ev.game.data.scores));
-  })
-
-  JepFsm.on('noAnswer', ev => {
-    console.log('Stumped Ya Good, Ya Dingus', ev);
-    console.log(`answer was ${ev.game.data.question.answer}`);
-  });
-
-  JepFsm.on('roundOver', ev => {
-    console.log('I May Be Square But Even I Can Tell This Round Is Over!', ev);
-  });
-
-  JepFsm.on('gameOver', ev => {
-    console.log("Thank's For Playing!", ev);
-  });
-
-  const game = {channel: 123456};
-  JepFsm.Start(game);
-
-  // global.jep.COmmand(global.game, 'sponge', 'what is the answer')
-  global.game = game;
-  global.jep = JepFsm;
 }
 
-main();
+export default GetGameFSM

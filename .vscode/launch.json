@@ -7,8 +7,8 @@
     {
       "type": "node",
       "request": "launch",
-      "name": "Launch Program",
-      "program": "${workspaceFolder}/index.mjs",
+      "name": "Launch Console Game",
+      "program": "${workspaceFolder}/console.mjs",
       "runtimeArgs": ["--experimental-modules"]
     }
   ]
