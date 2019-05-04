@@ -58,6 +58,7 @@ async function GetGameFSM() {
             board: [],
             scores: {},
             question: null,
+            questionsAsked: 0,
             questionsLeft: 0,
             boardControl: null,
             timer: 0
@@ -99,6 +100,7 @@ async function GetGameFSM() {
 
           // for easier tracking
           gd.questionsLeft = results.length;
+          gd.questionsAsked = 0;
 
           if (gd.boardControl === null) {
             gd.boardControl = _.sample(Object.keys(gd.scores));
@@ -224,6 +226,7 @@ async function GetGameFSM() {
           // if the board is empty, move on to the next round
           game.data.question = null;
           game.data.questionsLeft -= 1;
+          game.data.questionsAsked += 1;
           if (game.data.questionsLeft === 0) {
             this.transition(game, 'roundOver');
           } else {
@@ -258,8 +261,10 @@ async function GetGameFSM() {
       }
     },
 
-    // convenience functions
-
+    GetScores: function(game) {
+      return Object.entries(game.data.scores).sort((a,b) => a[1] - b[1]);
+    },
+    
     Start: function(game, players) {
       this.handle(game, 'start', players);
     },

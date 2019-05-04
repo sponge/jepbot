@@ -15,15 +15,15 @@ const emoji = {
   empty: '<:jepempty:573971965573070858>',
 };
 
-async function renderScores(client, game) {
-  let scores = '';
+async function renderScores(client, fsm, game) {
+  const scores = [];
 
-  for (let id in game.data.scores) {
-    const user = await client.fetchUser(id);
-    scores += `${user.username}: *$${game.data.scores[id]}*\n`;
+  for (let score of fsm.GetScores(game)) {
+    const user = await client.fetchUser(score[0]);
+    scores.push(`${user.username}: **$${score[1]}**`);
   }
 
-  return scores;
+  return scores.join(', ');
 }
 
 function renderScoreBoard(game) {
@@ -76,7 +76,7 @@ async function main() {
       }
     } else {
       if (msg.content === '!scores') {
-        const scores = await renderScores(client, game);
+        const scores = await renderScores(client, JepFSM, game);
         const embed = simpleEmbed('Scores', scores);
         game.channel.send(embed);
       } else if (msg.content === '!board') {
@@ -109,12 +109,18 @@ async function main() {
     let board = '';
 
     // don't show the board if the round has just started
-    if (_.flatten(ev.board).filter(clue => !clue.enabled).length !== 0) {
+    if (ev.game.data.questionsAsked !== 0) {
       board += renderScoreBoard(ev.game);
     }
     
     const user = await client.fetchUser(ev.player);
     board += `${user}, you're in control. Select a category by saying (number) for (value).`;
+
+    // don't show scores if its the start of round 1
+    if ((ev.game.data.questionsAsked === 0 && ev.game.data.round === 1) === false) {
+      const scores = await renderScores(client, JepFSM, ev.game);
+      board += `\n\n${scores}`;
+    }
 
     const embed = simpleEmbed(`Round ${ev.game.data.round}`, board);
     ev.game.channel.send(embed);
@@ -126,13 +132,13 @@ async function main() {
   });
 
   JepFSM.on('rightAnswer', async ev => {
-    const scores = await renderScores(client, ev.game);
+    const scores = await renderScores(client, JepFSM, ev.game);
     const embed = simpleEmbed('Correct!', `"${ev.question.answer}" is the correct answer.\n${scores}`);
     ev.game.channel.send(embed);
   })
 
   JepFSM.on('wrongAnswer', async ev => {
-    const scores = await renderScores(client, ev.game);
+    const scores = await renderScores(client, JepFSM, ev.game);
     const embed = simpleEmbed('Incorrect!', scores);
     ev.game.channel.send(embed);
   })
@@ -143,13 +149,13 @@ async function main() {
   });
 
   JepFSM.on('roundOver', async ev => {
-    const scores = await renderScores(client, ev.game);
+    const scores = await renderScores(client, JepFSM, ev.game);
     const embed = simpleEmbed('Round over!', scores);
     ev.game.channel.send(embed);
   });
 
   JepFSM.on('gameOver', async ev => {
-    const scores = await renderScores(client, ev.game);
+    const scores = await renderScores(client, JepFSM, ev.game);
     const embed = simpleEmbed('Game Over!', `${scores}\nThanks for playing!`);
     ev.game.channel.send(embed);
   });
