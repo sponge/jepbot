@@ -326,7 +326,7 @@ async function main() {
   const game = {channel: 123456};
   JepFsm.Start(game);
 
-  // global.jep.Guess(global.game, 'sponge', 'hello')
+  // global.jep.COmmand(global.game, 'sponge', 'what is the answer')
   global.game = game;
   global.jep = JepFsm;
 }
