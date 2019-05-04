@@ -29,9 +29,10 @@ async function GetGameFSM() {
 
     // fsm-specific options
     defaultGameOptions: {
-      questionTime: 15000,            // how long players have to answer the question
-      timeBetweenQuestions: 4000,     // how long in between question answer/timeout and the next question selection
+      questionTime: 18000,            // how long players have to answer the question
+      timeBetweenQuestions: 5000,     // how long in between question answer/timeout and the next question selection
       timeBetweenRounds: 8000,        // how long in between rounds
+      timeAfterRoundStart: 8000,      // how long after the board is generated and the round starts
       autoPickQuestions: true,        // randomly choose questions in a round, or let players choose them
       gameRounds: 2,                  // how many regular rounds in a game
       playFinalRound: false,          // run the final round after gameRounds rounds are complete
@@ -98,12 +99,11 @@ async function GetGameFSM() {
           gd.questionsLeft = results.length;
 
           // round is setup, move to select question phase
+          this.emit('roundStart', {game, round: game.data.round});
+
+          await delay(game.options.timeAfterRoundStart);
           this.transition(game, 'selectQuestion');
         },
-
-        _onExit: function(game) {
-          this.emit('roundStart', {game, round: game.data.round});
-        }
       },
 
       // pick a question from the board based on random or input
@@ -111,9 +111,9 @@ async function GetGameFSM() {
         _onEnter: function(game) {
           game.data.question = null;
 
-          // if auto pick is on, find a question still active and just ask it immediately
+          // if auto pick is on, find a question still enabled and just ask it immediately
           if (game.options.autoPickQuestions) {
-            const questions = _.flatten(game.data.board).filter(clue => !clue.active);
+            const questions = _.flatten(game.data.board).filter(clue => clue.enabled);
             const choice = _.sample(questions);
 
             this.handle(game, 'chooseQuestion', choice.category, choice.level);
@@ -148,6 +148,7 @@ async function GetGameFSM() {
       // ask the question, and handle input for answers/question timeout
       askQuestion: {
         _onEnter: function(game) {
+          game.data.question.enabled = false;
           game.data.guesses = {};
           // setup question timeout if no one answers in time
           game.timer = setTimeout(() => this.transition(game, 'noAnswer'), game.options.questionTime);
@@ -179,12 +180,12 @@ async function GetGameFSM() {
           // check answer correctness
           if (closeEnough(guess, d.question.answer, game.options.answerSimilarity)) {
             d.scores[player] += d.question.cost;
-            this.emit('rightAnswer', {game, player});
+            this.emit('rightAnswer', {game, player, question: d.question});
             this.transition(game, 'questionOver');
           } else {
             d.scores[player] -= d.question.cost;
             d.guesses[player] += 1;
-            this.emit('wrongAnswer', {game, player, guess});
+            this.emit('wrongAnswer', {game, player, guess, question: d.question});
           }
         }
       },
@@ -192,7 +193,7 @@ async function GetGameFSM() {
       // nobody guessed the answer in time. emit an event so we can print a message out and move on
       noAnswer: {
         _onEnter: function(game) {
-          this.emit('noAnswer', {game});
+          this.emit('noAnswer', {game, question: game.data.question});
           this.transition(game, 'questionOver');
         }
       },
@@ -214,7 +215,6 @@ async function GetGameFSM() {
 
       roundOver: {
         _onEnter: async function(game) {
-          this.emit('roundOver', {game});
           // check if we need to move into final jeopardy
           await delay(game.options.timeBetweenRounds);
           if (game.data.round === game.options.gameRounds) {
@@ -224,6 +224,7 @@ async function GetGameFSM() {
               this.transition(game, 'gameOver');
             }
           } else {
+            this.emit('roundOver', {game});
             this.transition(game, 'roundStart');
           }
         }

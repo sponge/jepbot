@@ -1,16 +1,54 @@
 import Config from './config.mjs';
 import GetGameFSM from './fsm.mjs';
 import Discord from 'discord.js';
+import _ from 'lodash';
 
-async function getScores(client, game) {
+const emoji = {
+  200: '<:jep200:573971965560356874>',
+  400: '<:jep400:573971965463756811>',
+  600: '<:jep600:573971965581197312>',
+  800: '<:jep800:573971965573070848>',
+  1000: '<:jep1000:573971965568614450>',
+  1200: '<:jep1200:573971965627465728>',
+  1600: '<:jep1600:573971965614882866>',
+  2000: '<:jep2000:573971965442916380>',
+  empty: '<:jepempty:573971965573070858>',
+};
+
+async function renderScores(client, game) {
   let scores = '';
 
   for (let id in game.data.scores) {
     const user = await client.fetchUser(id);
-    scores += `${user.username}: ${game.data.scores[id]}\n`;
+    scores += `${user.username}: *$${game.data.scores[id]}*\n`;
   }
 
   return scores;
+}
+
+function renderScoreBoard(game) {
+  const gd = game.data;
+  let board = '';
+  const maxCategoryLength = _.maxBy(gd.categories, c => c.length).length;
+
+  for (let i = 0; i < gd.categories.length; i++) {
+    const header = _.padStart(gd.categories[i], maxCategoryLength, '.');
+    board += `\`${i+1}.${header} \` `;
+
+    for (let question of gd.board[i]) {
+      board += question.enabled ? emoji[question.cost] : emoji.empty;
+    }
+    board += '\n';
+  }
+
+  return board;
+}
+
+function simpleEmbed(title, description) {
+  return new Discord.RichEmbed()
+    .setTitle(title)
+    .setColor(0x000d8b)
+    .setDescription(description)
 }
 
 async function main() {
@@ -24,17 +62,23 @@ async function main() {
   });
   
   client.on('message', async msg => {
-    if (!games[msg.channel.id]) {
-      if (msg.content === '!startgame') {
-        const newGame = {channel: msg.channel};
+    const game = games[msg.channel.id];
+
+    if (!game) {
+      if (msg.content === '!jeopardy') {
+        const newGame = {channel: msg.channel, options: { numCategoriesPerRound: 2 }};
         JepFSM.Start(newGame, [msg.author.id]);
         games[msg.channel.id] = newGame;
       }
     } else {
       if (msg.content === '!scores') {
-        const game = games[msg.channel.id];
-        const scores = await getScores(client, game);
-        game.channel.send(scores);
+        const scores = await renderScores(client, game);
+        const embed = simpleEmbed('Scores', scores);
+        game.channel.send(embed);
+      } else if (msg.content === '!board') {
+        const board = renderScoreBoard(game);
+        const embed = simpleEmbed(`Round ${game.data.round}`, board);
+        game.channel.send(embed);      
       } else {
         JepFSM.Command(games[msg.channel.id], msg.author.id, msg.content);
       }
@@ -42,61 +86,47 @@ async function main() {
   });
 
   JepFSM.on('gameStart', ev => {
-    ev.game.channel.send("Lettuce Start Because I'm Hungry To Play!!!");
+
   });
 
   JepFSM.on('roundStart', ev => {
-    ev.game.channel.send("We've Got A Hot Board Of Questions For You!!!");
+    const board = renderScoreBoard(ev.game);
+    const embed = simpleEmbed(`Round ${ev.round}`, board);
+    ev.game.channel.send(embed);
   });
 
   JepFSM.on('questionSelected', ev => {
-    ev.game.channel.send(`
-      Get A Load Of This One. It's A Real Thinker:
-      ${ev.question.category}
-      $${ev.question.cost}
-      ${ev.question.question}
-    `);
+    const embed = simpleEmbed(`${ev.question.category}: $${ev.question.cost}`, ev.question.question);
+    ev.game.channel.send(embed);
   });
 
   JepFSM.on('rightAnswer', async ev => {
-    const scores = await getScores(client, ev.game);
-
-    ev.game.channel.send(`
-      Wow You Are Smarter, Much Smarter Than My Ex-Wife!
-      ${ev.player} guessed ${ev.game.data.question.answer} right
-      ${scores}
-    `);
+    const scores = await renderScores(client, ev.game);
+    const embed = simpleEmbed('Correct!', `"${ev.question.answer}" is the correct answer.\n${scores}`);
+    ev.game.channel.send(embed);
   })
 
-  JepFSM.on('wrongAnswer', ev => {
-    ev.game.channel.send(`
-      You Fool! ${ev.player} guessed "${ev.guess}" wrong
-    `);
+  JepFSM.on('wrongAnswer', async ev => {
+    const scores = await renderScores(client, ev.game);
+    const embed = simpleEmbed('Incorrect!', scores);
+    ev.game.channel.send(embed);
   })
 
   JepFSM.on('noAnswer', ev => {
-    ev.game.channel.send(`
-      Stumped Ya Good, Ya Dingus
-      The answer was ${ev.game.data.question.answer}
-    `);
+    const embed = simpleEmbed("Time's up!", `The answer was "${ev.question.answer}"`);
+    ev.game.channel.send(embed);
   });
 
   JepFSM.on('roundOver', async ev => {
-    const scores = await getScores(client, ev.game);
-
-    ev.game.channel.send(`
-      I May Be Square But Even I Can Tell This Round Is Over!
-      ${scores}
-    `);
+    const scores = await renderScores(client, ev.game);
+    const embed = simpleEmbed('Round over!', scores);
+    ev.game.channel.send(embed);
   });
 
   JepFSM.on('gameOver', async ev => {
-    const scores = await getScores(client, ev.game);
-
-    ev.game.channel.send(`
-      Thank's For Playing!
-      ${scores}
-    `);
+    const scores = await renderScores(client, ev.game);
+    const embed = simpleEmbed('Game Over!', `${scores}\nThanks for playing!`);
+    ev.game.channel.send(embed);
   });
 
   client.login(Config.token);
