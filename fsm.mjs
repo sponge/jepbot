@@ -30,6 +30,7 @@ async function GetGameFSM() {
     // fsm-specific options
     defaultGameOptions: {
       questionTime: 18000,            // how long players have to answer the question
+      chooseQuestionTIme: 10000,      // how long a player has to choose a question before a random one is picked
       timeBetweenQuestions: 5000,     // how long in between question answer/timeout and the next question selection
       timeBetweenRounds: 8000,        // how long in between rounds
       timeAfterRoundStart: 8000,      // how long after the board is generated and the round starts
@@ -58,6 +59,7 @@ async function GetGameFSM() {
             scores: {},
             question: null,
             questionsLeft: 0,
+            boardControl: null,
             timer: 0
           };
 
@@ -98,6 +100,10 @@ async function GetGameFSM() {
           // for easier tracking
           gd.questionsLeft = results.length;
 
+          if (gd.boardControl === null) {
+            gd.boardControl = _.sample(Object.keys(gd.scores));
+          }
+
           // round is setup, move to select question phase
           this.emit('roundStart', {game, round: game.data.round});
 
@@ -113,35 +119,49 @@ async function GetGameFSM() {
 
           // if auto pick is on, find a question still enabled and just ask it immediately
           if (game.options.autoPickQuestions) {
-            const questions = _.flatten(game.data.board).filter(clue => clue.enabled);
-            const choice = _.sample(questions);
-
-            this.handle(game, 'chooseQuestion', choice.category, choice.level);
+            this.handle(game, 'chooseRandomQuestion');
+          } else {  
+            this.emit('questionSelectReady', {game, board: game.data.board, player: game.data.boardControl});
+            game.data.timer = setTimeout(() => this.handle(game, 'chooseRandomQuestion'), game.options.chooseQuestionTIme );
           }
         },
 
         _onExit: function(game) {
+          clearTimeout(game.data.timer);
           this.emit('questionSelected', {game, question: game.data.question});
+        },
+
+        chooseRandomQuestion: function(game) {
+          const questions = _.flatten(game.data.board).filter(clue => clue.enabled);
+          const choice = _.sample(questions);
+
+          this.handle(game, 'chooseQuestion', choice.category, choice.level, game.data.boardControl);
         },
 
         // handle and validate question selection. category is the exact string of the
         // category of the question, level is 1-5
-        chooseQuestion: function(game, category, level, player) {
+        chooseQuestion: function(game, category, level, player) {          
+          if (!game.options.autoPickQuestions && game.data.boardControl !== player) {
+            return false;
+          }
+
           const idx = game.data.categories.indexOf(category);
 
           if (idx == -1 || level < 1 || level > 5) {
-            return;
+            return false;
           }
 
           const question = game.data.board[idx][level - 1];
 
           if (!question.enabled) {
-            return;
+            return false;
           }
 
           // question is valid, move on to asking it
           game.data.question = question;
           this.transition(game, 'askQuestion');
+
+          return;
         }
       },
 
@@ -160,32 +180,33 @@ async function GetGameFSM() {
 
         // handle guesses from player
         guess: function(game, player, guess) {
-          const d = game.data;
+          const gd = game.data;
 
           // if they're a new player, set them up
-          if (!d.scores[player]) {
-            d.scores[player] = 0;
+          if (!gd.scores[player]) {
+            gd.scores[player] = 0;
           }
 
           // if they haven't guessed yet, set them up for this question
-          if (!d.guesses[player]) {
-            d.guesses[player] = 0;
+          if (!gd.guesses[player]) {
+            gd.guesses[player] = 0;
           }
 
           // too many guesses
-          if (d.guesses[player] >= game.options.guessesPerQuestion) {
+          if (gd.guesses[player] >= game.options.guessesPerQuestion) {
             return;
           }
 
           // check answer correctness
-          if (closeEnough(guess, d.question.answer, game.options.answerSimilarity)) {
-            d.scores[player] += d.question.cost;
-            this.emit('rightAnswer', {game, player, question: d.question});
+          if (closeEnough(guess, gd.question.answer, game.options.answerSimilarity)) {
+            gd.scores[player] += gd.question.cost;
+            gd.boardControl = player;
+            this.emit('rightAnswer', {game, player, question: gd.question});
             this.transition(game, 'questionOver');
           } else {
-            d.scores[player] -= d.question.cost;
-            d.guesses[player] += 1;
-            this.emit('wrongAnswer', {game, player, guess, question: d.question});
+            gd.scores[player] -= gd.question.cost;
+            gd.guesses[player] += 1;
+            this.emit('wrongAnswer', {game, player, guess, question: gd.question});
           }
         }
       },
@@ -244,19 +265,18 @@ async function GetGameFSM() {
     },
 
     Guess: function(game, player, guess) {
-      this.handle(game, 'guess', player, guess);
+      return this.handle(game, 'guess', player, guess);
     },
 
     ChooseQuestion: function(game, category, level, player) {
-      this.handle(game, 'chooseQuestion', category, level, player);
+      return this.handle(game, 'chooseQuestion', category, level, player);
     },
 
     Command: function(game, player, command) {
       // if the line is in the form of a question, pass it into the fsm as a guess
       const matchGuess = /(?:who|what|when|where)\s*(?:is|was|are)\s*(.*)/gmi.exec(command);
       if (matchGuess && matchGuess.length == 2) {
-        this.Guess(game, player, matchGuess[1]);
-        return;
+        return this.Guess(game, player, matchGuess[1]);
       }
 
       // if command contains "for" see if words before are a category and after is a number, handle as category selection
@@ -281,10 +301,10 @@ async function GetGameFSM() {
             .sort((a,b) => b[1].similarity - a[1].similarity);
 
           if (distances[0][1].similarity >= 0.5) {
-            this.ChooseQuestion(game, ggame.data.categories.indexOf(distances[0][0]), level);
+            return this.ChooseQuestion(game, game.data.categories.indexOf(distances[0][0]), level);
           }
         } else {
-          this.ChooseQuestion(game, game.data.categories[categoryNum - 1], level);
+          return this.ChooseQuestion(game, game.data.categories[categoryNum - 1], level, player);
         }
       }
 

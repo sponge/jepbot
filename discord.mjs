@@ -64,9 +64,13 @@ async function main() {
   client.on('message', async msg => {
     const game = games[msg.channel.id];
 
+    if (msg.author.bot) {
+      return;
+    }
+
     if (!game) {
       if (msg.content === '!jeopardy') {
-        const newGame = {channel: msg.channel, options: { numCategoriesPerRound: 2 }};
+        const newGame = {channel: msg.channel, options: { autoPickQuestions: false, numCategoriesPerRound: 6 }};
         JepFSM.Start(newGame, [msg.author.id]);
         games[msg.channel.id] = newGame;
       }
@@ -80,7 +84,13 @@ async function main() {
         const embed = simpleEmbed(`Round ${game.data.round}`, board);
         game.channel.send(embed);      
       } else {
-        JepFSM.Command(games[msg.channel.id], msg.author.id, msg.content);
+        const valid = JepFSM.Command(games[msg.channel.id], msg.author.id, msg.content);
+        console.log(valid);
+        if (valid === true) {
+          msg.react('✅');
+        } else if (valid === false) {
+          msg.react('❌');
+        }
       }
     }
   });
@@ -92,6 +102,21 @@ async function main() {
   JepFSM.on('roundStart', ev => {
     const board = renderScoreBoard(ev.game);
     const embed = simpleEmbed(`Round ${ev.round}`, board);
+    ev.game.channel.send(embed);
+  });
+
+  JepFSM.on('questionSelectReady', async ev => {
+    let board = '';
+
+    // don't show the board if the round has just started
+    if (_.flatten(ev.board).filter(clue => !clue.enabled).length !== 0) {
+      board += renderScoreBoard(ev.game);
+    }
+    
+    const user = await client.fetchUser(ev.player);
+    board += `${user}, you're in control. Select a category by saying (number) for (value).`;
+
+    const embed = simpleEmbed(`Round ${ev.game.data.round}`, board);
     ev.game.channel.send(embed);
   });
 
