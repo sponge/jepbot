@@ -37,7 +37,7 @@ async function GetGameFSM() {
       gameRounds: 2,                  // how many regular rounds in a game
       playFinalRound: false,          // run the final round after gameRounds rounds are complete
       guessesPerQuestion: 1,          // let players guess multiple times per question
-      answerSimilarity: 0.7,          // how close do answers need to be to be correct, uses damerau-lecenshtein string distance
+      answerSimilarity: 0.6,          // how close do answers need to be to be correct, uses damerau-lecenshtein string distance
       numCategoriesPerRound: 6,       // number of categories selected per round
     },
 
