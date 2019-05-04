@@ -48,7 +48,7 @@ async function GetGameFSM() {
           this.emit('gameStart', {game});
         },
 
-        '*': function(game) {
+        start: function(game, players) {
           game.options = {...this.defaultGameOptions, ...game.options};
           game.data = {
             round: 0,
@@ -60,7 +60,13 @@ async function GetGameFSM() {
             timer: 0
           };
 
-          this.transition(game, 'roundStart')
+          if (players) {
+            players.forEach(p => {
+              game.data.scores[p] = 0;
+            });
+          }
+
+          this.transition(game, 'roundStart');
         }
       },
 
@@ -232,8 +238,8 @@ async function GetGameFSM() {
 
     // convenience functions
 
-    Start: function(game) {
-      this.handle(game, 'start');
+    Start: function(game, players) {
+      this.handle(game, 'start', players);
     },
 
     Guess: function(game, player, guess) {
