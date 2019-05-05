@@ -4,7 +4,7 @@ import Discord from 'discord.js';
 import _ from 'lodash';
 
 import fs from 'fs';
-import {promisify} from 'util';
+import { promisify } from 'util';
 
 const readFile = promisify(fs.readFile);
 const writeFile = promisify(fs.writeFile);
@@ -42,7 +42,7 @@ function renderBoard(game) {
 
   for (let i = 0; i < gd.categories.length; i++) {
     const header = _.padStart(gd.categories[i], maxCategoryLength, '.');
-    board += `\`${i+1}.${header} \` `;
+    board += `\`${i + 1}.${header} \` `;
 
     for (let question of gd.board[i]) {
       board += gd.question === question ? emoji.glow : question.enabled ? emoji[question.cost] : emoji.empty;
@@ -88,7 +88,7 @@ async function main() {
   client.on('ready', () => {
     console.log(`Logged in as ${client.user.tag}!`);
   });
-  
+
   client.on('message', async msg => {
     const game = games[msg.channel.id];
 
@@ -98,7 +98,7 @@ async function main() {
 
     if (!game) {
       if (msg.content === '!jeopardy') {
-        const newGame = {channel: msg.channel};
+        const newGame = { channel: msg.channel };
         JepFSM.Start(newGame, [msg.author.id]);
         games[msg.channel.id] = newGame;
       }
@@ -110,7 +110,7 @@ async function main() {
       } else if (msg.content === '!board') {
         const board = renderBoard(game);
         const embed = simpleEmbed(`Round ${game.data.round}`, board);
-        game.channel.send(embed);      
+        game.channel.send(embed);
       } else {
         const status = JepFSM.Command(games[msg.channel.id], msg.author.id, msg.content);
         if (status === 'unknown') {
@@ -174,7 +174,7 @@ async function main() {
     }
 
     const embed = simpleEmbed(`Round ${ev.game.data.round}`, board);
-    
+
     if (ev.game.boardMessage) {
       ev.game.boardMessage.edit(embed);
       ev.game.boardMessage = null;
