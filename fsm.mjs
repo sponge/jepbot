@@ -135,6 +135,7 @@ async function GetGameFSM() {
       selectQuestion: {
         _onEnter: function (game) {
           game.data.question = null;
+          game.data.wagers = null;
 
           // if auto pick is on, find a question still enabled and just ask it immediately
           if (game.options.autoPickQuestions) {
