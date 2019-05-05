@@ -252,9 +252,11 @@ async function GetGameFSM() {
           game.data.guesses = {};
           // setup question timeout if no one answers in time
           game.timer = setTimeout(() => {
-            // if we timeout, anyone who wagers on the question automatically loses the money
+            // if we timeout, anyone who wagers on the question and hasn't answered automatically loses the money
             if (game.data.wagers !== null) {
-              Object.entries(game.data.wagers).forEach(wager => game.data.scores[wager[0]] -= wager[1]);
+              Object.entries(game.data.wagers)
+                .filter(wager => game.data.guesses[wager[0]] < game.options.guessesPerQuestion)
+                .forEach(wager => game.data.scores[wager[0]] -= wager[1]);
             }
             // move on to the end of the answer
             this.transition(game, 'noAnswer');
