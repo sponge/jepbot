@@ -107,11 +107,13 @@ async function GetGameFSM() {
           // get a list of our categories
           gd.categories = _.uniq(results.map(o => o.category));
 
-          // make empty arrays for each of our board cells and add the questions to them
+          // make an empty array for each category
           gd.board = gd.categories.map(()=> []);
 
+          // randomly select the daily double questions
           const dailyDoubles = _.sampleSize(results, game.options.numDailyDoublesPerRound);
 
+          // add the questions into our board
           results.forEach(clue => {
             const idx = gd.categories.indexOf(clue.category);
             // if (dailyDoubles.includes(clue)) {
@@ -132,6 +134,7 @@ async function GetGameFSM() {
           // round is setup, move to select question phase
           this.emit('roundStart', { game, round: game.data.round });
 
+          // wait some time before going to the next round
           await delay(game.options.timeAfterRoundStart);
           this.transition(game, 'selectQuestion');
         },
@@ -140,19 +143,16 @@ async function GetGameFSM() {
       // pick a question from the board based on random or input
       selectQuestion: {
         _onEnter: function (game) {
+          // null out data from previous question
           game.data.question = null;
           game.data.wagers = null;
 
           // if auto pick is on, find a question still enabled and just ask it immediately
-          if (game.options.autoPickQuestions) {
+          if (game.options.autoPickQuestions || game.data.questionsLeft === 1) {
             this.handle(game, 'chooseRandomQuestion');
           } else {
-            if (game.data.questionsLeft === 1) {
-              this.handle(game, 'chooseRandomQuestion');
-            } else {
-              this.emit('questionSelectReady', { game, board: game.data.board, player: game.data.boardControl });
-              game.data.timer = setTimeout(() => this.handle(game, 'chooseRandomQuestion'), game.options.chooseQuestionTime);
-            }
+            this.emit('questionSelectReady', { game, board: game.data.board, player: game.data.boardControl });
+            game.data.timer = setTimeout(() => this.handle(game, 'chooseRandomQuestion'), game.options.chooseQuestionTime);
           }
         },
 
@@ -166,30 +166,37 @@ async function GetGameFSM() {
         // handle and validate question selection. category is the exact string of the
         // category of the question, level is 1-5
         chooseQuestion: function (game, category, level, player) {
+          // don't let players not in control of the board pick a question
           if (!game.options.autoPickQuestions && game.data.boardControl !== player) {
             return 'unknown';
           }
 
+          // out of range questions
           const idx = game.data.categories.indexOf(category);
           if (idx == -1 || level < 1 || level > 5) {
             return 'unknown';
           }
 
-          if (idx !== Math.floor(idx) || level !== Math.floor(level)) {
+          // must be whole numbers
+          if (level !== Math.floor(level)) {
             return 'unknown';
           }
 
+          // can't pick disabled questions
           const question = game.data.board[idx][level - 1];
           if (!question.enabled) {
             return 'unknown';
           }
 
           // question is valid, move on to asking it
+          // we're not doing cleartimeout and transition in an _onExit so we can delay before moving to the next state
           game.data.question = question;
           this.emit('questionSelected', { game, question: game.data.question, player: game.data.boardControl });
           clearTimeout(game.data.timer);
 
+          // wait an amount of time, so the players can be notified of what the category is before getting the question
           setTimeout(() => {
+            // if it's a daily double, move onto asking the player for a wager, otherwise just ask the question
             const nextState = game.data.question.dailyDouble ? 'askWager' : 'askQuestion';
             this.transition(game, nextState);
           }, game.options.timeBeforeAskQuestion);
@@ -203,6 +210,7 @@ async function GetGameFSM() {
 
           gd.wagers = {};
 
+          // if the question, setup a wager for the person who is controlling the board
           if (gd.question.dailyDouble === true) {
             gd.wagers[gd.boardControl] = null;
           }
@@ -221,12 +229,16 @@ async function GetGameFSM() {
           clearTimeout(game.data.timer);
         },
 
+        // handles wager input usually from Command
         wager: function (game, player, amount) {
           const gd = game.data;
+
+          // if they don't have a pending wager, ignore it
           if (player in gd.wagers === false) {
             return;
           }
 
+          // the amount in the wager is subject to rules, get the range and check it here
           const range = this.GetValidWagerRange(game, player);
           if (amount < range[0] || amount > range[1]) {
             return 'badWager';
