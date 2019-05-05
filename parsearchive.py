@@ -76,6 +76,14 @@ def parse_board(round_div):
         if "href" in answer:
             continue
 
+        question = question.replace('<br />', '\n')
+        question = question.replace('<i>', '*')
+        question = question.replace('</i>', '*')
+        question = question.replace('<sub>', '')
+        question = question.replace('</sub>', '')
+        question = question.replace('<sup>', '')
+        question = question.replace('</sup>', '')
+
         o = {
             "round": round_num,
             "category": category,
