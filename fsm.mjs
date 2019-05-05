@@ -57,7 +57,7 @@ async function GetGameFSM() {
           if (game.options.autoPickQuestions) {
             game.options.numDailyDoublesPerRound = 0;
           }
-  
+
           game.data = {
             round: 0,
             categories: [],
@@ -108,7 +108,7 @@ async function GetGameFSM() {
           gd.categories = _.uniq(results.map(o => o.category));
 
           // make an empty array for each category
-          gd.board = gd.categories.map(()=> []);
+          gd.board = gd.categories.map(() => []);
 
           // randomly select the daily double questions
           const dailyDoubles = _.sampleSize(results, game.options.numDailyDoublesPerRound);
@@ -216,7 +216,7 @@ async function GetGameFSM() {
             gd.wagers[gd.boardControl] = null;
           }
 
-          this.emit('askWager', { game, wagers: gd.wagers, type: 'dailydouble'});
+          this.emit('askWager', { game, wagers: gd.wagers, type: 'dailydouble' });
           gd.timer = setTimeout(() => this.transition(game, 'askQuestion'), game.options.wagerTime);
         },
 
@@ -247,7 +247,7 @@ async function GetGameFSM() {
 
           gd.wagers[player] = amount;
 
-          this.emit('onWager', {game, player, amount});
+          this.emit('onWager', { game, player, amount });
 
           // if no more wagers are left, move on to asking the question immediately
           if (!Object.values(gd.wagers).includes(null)) {
@@ -373,7 +373,7 @@ async function GetGameFSM() {
       return Object.entries(game.data.scores).sort((a, b) => b[1] - a[1]);
     },
 
-    GetValidWagerRange: function(game, player) {
+    GetValidWagerRange: function (game, player) {
       return [5, Math.max(game.data.scores[player], game.data.round * 500)];
     },
 
@@ -389,7 +389,7 @@ async function GetGameFSM() {
       return this.handle(game, 'chooseQuestion', category, level, player);
     },
 
-    Wager: function(game, player, amount) {
+    Wager: function (game, player, amount) {
       return this.handle(game, 'wager', player, amount);
     },
 

@@ -22,6 +22,18 @@ const emoji = {
   glow: '<:jepglow:574412831714181120>',
 };
 
+const rulesPresets = {
+  full: {
+    description: 'The classic game, full length.',
+    options: {}
+  },
+
+  quick: {
+    description: 'A shorter experience to just chill and answer questions. 1 round, questions are randomly picked.',
+    options: { numRounds: 1, autoPickQuestions: true }
+  }
+};
+
 async function renderScores(client, fsm, game) {
   const scores = [];
 
@@ -128,10 +140,17 @@ async function main() {
       return;
     }
 
-    switch (msg.content) {
+    const args = msg.content.split(' ', 2);
+
+    switch (args[0]) {
       case '!jeopardy': {
         if (game) { break; }
-        const newGame = { channel: msg.channel };
+        if (!args[1] || args[1] in rulesPresets === false) {
+          msg.reply(Object.entries(rulesPresets).map(o => `\n!jeopardy ${o[0]}: ${o[1].description}`));
+          break;
+        }
+
+        const newGame = { channel: msg.channel, options: rulesPresets[args[1]].options };
         JepFSM.Start(newGame, [msg.author.id]);
         games[msg.channel.id] = newGame;
         break;
