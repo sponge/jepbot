@@ -142,29 +142,28 @@ async function GetGameFSM() {
 
         // handle and validate question selection. category is the exact string of the
         // category of the question, level is 1-5
-        chooseQuestion: async function(game, category, level, player) {          
+        chooseQuestion: function(game, category, level, player) {          
           if (!game.options.autoPickQuestions && game.data.boardControl !== player) {
-            return false;
+            return 'unknown';
           }
 
           const idx = game.data.categories.indexOf(category);
 
           if (idx == -1 || level < 1 || level > 5) {
-            return false;
+            return 'unknown';
           }
 
           const question = game.data.board[idx][level - 1];
 
           if (!question.enabled) {
-            return false;
+            return 'unknown';
           }
 
           // question is valid, move on to asking it
           game.data.question = question;
           this.emit('questionSelected', {game, question: game.data.question, player: game.data.boardControl});
-          await delay(game.options.timeBeforeAskQuestion);
-          
-          this.transition(game, 'askQuestion');
+
+          setTimeout(() => this.transition(game, 'askQuestion'), game.options.timeBeforeAskQuestion);
 
           return;
         }
@@ -209,10 +208,12 @@ async function GetGameFSM() {
             gd.boardControl = player;
             this.emit('rightAnswer', {game, player, question: gd.question});
             this.transition(game, 'questionOver');
+            return 'rightAnswer';
           } else {
             gd.scores[player] -= gd.question.cost;
             gd.guesses[player] += 1;
             this.emit('wrongAnswer', {game, player, guess, question: gd.question});
+            return 'wrongAnswer';
           }
         }
       },
@@ -283,7 +284,7 @@ async function GetGameFSM() {
 
     Command: function(game, player, command) {
       // if the line is in the form of a question, pass it into the fsm as a guess
-      const matchGuess = /(?:who|what|when|where)\s*(?:is|was|are)\s*(.*)/gmi.exec(command);
+      const matchGuess = /^(?:who|what|when|where)\s*(?:is|was|are)\s*(.*)/gmi.exec(command);
       if (matchGuess && matchGuess.length == 2) {
         return this.Guess(game, player, matchGuess[1]);
       }
@@ -307,11 +308,8 @@ async function GetGameFSM() {
         level /= level >= 100 ? 200 : 2
 
         return this.ChooseQuestion(game, game.data.categories[categoryNum - 1], level, player);
-        }
       }
-
     }
-
   });
 }
 

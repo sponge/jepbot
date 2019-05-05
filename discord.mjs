@@ -67,8 +67,8 @@ function updateStats(stats, id, rightAnswer, amount) {
 
   const player = stats[id];
   player.earnings += amount;
-  player.correct = rightAnswer ? 1 : 0;
-  player.wrong = rightAnswer ? 0 : 1;
+  player.correct += rightAnswer ? 1 : 0;
+  player.wrong += rightAnswer ? 0 : 1;
   player.accuracy = player.correct / (player.correct + player.wrong) * 100;
 
   writeFile('./stats.json', JSON.stringify(stats));
@@ -112,11 +112,12 @@ async function main() {
         const embed = simpleEmbed(`Round ${game.data.round}`, board);
         game.channel.send(embed);      
       } else {
-        const valid = JepFSM.Command(games[msg.channel.id], msg.author.id, msg.content);
-        if (valid === true) {
-          msg.react('✅');
-        } else if (valid === false) {
+        const status = JepFSM.Command(games[msg.channel.id], msg.author.id, msg.content);
+        if (status === 'unknown') {
           msg.react('❓');
+        } else if (status === 'wrongAnswer') {
+          //msg.react('🔻').then(() => msg.react('💰'));
+          msg.react('💸');
         }
       }
     }
@@ -199,9 +200,6 @@ async function main() {
   })
 
   JepFSM.on('wrongAnswer', async ev => {
-    const scores = await renderScores(client, JepFSM, ev.game);
-    const embed = simpleEmbed('Incorrect!', scores);
-    ev.game.channel.send(embed);
     updateStats(stats, ev.player, false, -ev.question.cost);
   })
 
