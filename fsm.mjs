@@ -26,7 +26,7 @@ async function GetGameFSM() {
 
     // fsm-specific options
     defaultGameOptions: {
-      questionTime: 14000,            // how long players have to answer the question
+      questionTime: 17000,            // how long players have to answer the question
       chooseQuestionTime: 10000,      // how long a player has to choose a question before a random one is picked
       timeBeforeAskQuestion: 5000,    // how long to wait after a question is chosen, to give people time to see the category
       timeBetweenQuestions: 6000,     // how long in between question answer/timeout and the next question selection
@@ -38,6 +38,8 @@ async function GetGameFSM() {
       guessesPerQuestion: 1,          // let players guess multiple times per question
       answerSimilarity: 0.6,          // how close correct answers need to be, see trimmedSimilarity and closeEnough for how this is measured
       numCategoriesPerRound: 6,       // number of categories selected per round
+      numDailyDoublesPerRound: 2,     // number of daily doubles to randomly distribute through the board. 0 to disable
+      wagerTime: 10000,               // how long a player has to wager for daily double/final jeopardy
     },
 
     states: {
@@ -55,6 +57,7 @@ async function GetGameFSM() {
             categories: [],
             board: [],
             scores: {},
+            wagers: null,
             question: null,
             questionsAsked: 0,
             questionsLeft: 0,
@@ -100,9 +103,20 @@ async function GetGameFSM() {
 
           // make empty arrays for each of our board cells and add the questions to them
           gd.board = gd.categories.map(()=> []);
+
+          const dailyDoubles = _.sampleSize(results, game.options.numDailyDoublesPerRound);
+
           results.forEach(clue => {
             const idx = gd.categories.indexOf(clue.category);
-            gd.board[idx].push({ ...clue, enabled: true, cost: gd.round * clue.level * 200 });
+            if (dailyDoubles.includes(clue)) {
+              console.log(`${clue.category}, ${clue.level}`);
+            }
+            gd.board[idx].push({
+              ...clue,
+              enabled: true,
+              dailyDouble: dailyDoubles.includes(clue),
+              cost: gd.round * clue.level * 200
+            });
           });
 
           // for easier tracking
@@ -150,13 +164,15 @@ async function GetGameFSM() {
           }
 
           const idx = game.data.categories.indexOf(category);
-
           if (idx == -1 || level < 1 || level > 5) {
             return 'unknown';
           }
 
-          const question = game.data.board[idx][level - 1];
+          if (idx !== Math.floor(idx) || level !== Math.floor(level)) {
+            return 'unknown';
+          }
 
+          const question = game.data.board[idx][level - 1];
           if (!question.enabled) {
             return 'unknown';
           }
@@ -166,9 +182,58 @@ async function GetGameFSM() {
           this.emit('questionSelected', { game, question: game.data.question, player: game.data.boardControl });
           clearTimeout(game.data.timer);
 
-          setTimeout(() => this.transition(game, 'askQuestion'), game.options.timeBeforeAskQuestion);
+          setTimeout(() => {
+            const nextState = game.data.question.dailyDouble ? 'askWager' : 'askQuestion';
+            this.transition(game, nextState, game.options.timeBeforeAskQuestion);
+          });
+        }
+      },
 
-          return;
+      // we're in a daily double, ask the player to wager an amount on the question
+      askWager: {
+        _onEnter: function (game) {
+          const gd = game.data;
+
+          gd.wagers = {};
+
+          if (gd.question.dailyDouble === true) {
+            gd.wagers[gd.boardControl] = null;
+          }
+
+          this.emit('askWager', { game, wagers: gd.wagers, type: 'dailydouble'});
+          gd.timer = setTimeout(() => this.transition(game, 'askQuestion'), game.options.wagerTime);
+        },
+
+        _onExit: function (game) {
+          // if the player hasn't bid, for daily doubles its the value of the clue, for final jeopardy it's everything
+          for (const id in game.data.wagers) {
+            if (game.data.wagers[id] === null) {
+              game.data.wagers[id] === game.data.round > game.options.numRounds ? game.data.question.cost : game.data.scores[id];
+            }
+          }
+          clearTimeout(game.data.timer);
+        },
+
+        wager: function (game, player, amount) {
+          const gd = game.data;
+          if (player in gd.wagers === false) {
+            return;
+          }
+
+          const range = this.GetValidWagerRange(game, player);
+          if (amount < range[0] || amount > range[1]) {
+            return 'badWager';
+          }
+
+          gd.wagers[player] = amount;
+
+          this.emit('onWager', {game, player, amount});
+
+          if (null in Object.values(gd.wagers) === false) {
+            this.transition(game, 'askQuestion');
+          }
+
+          return 'wager';
         }
       },
 
@@ -178,8 +243,15 @@ async function GetGameFSM() {
           game.data.question.enabled = false;
           game.data.guesses = {};
           // setup question timeout if no one answers in time
-          game.timer = setTimeout(() => this.transition(game, 'noAnswer'), game.options.questionTime);
-          this.emit('askQuestion', { game, question: game.data.question });
+          game.timer = setTimeout(() => {
+            // if we timeout, anyone who wagers on the question automatically loses the money
+            if (game.data.wagers !== null) {
+              Object.entries(game.data.wagers).forEach(wager => game.data.scores[wager[0]] -= wager[1]);
+            }
+            // move on to the end of the answer
+            this.transition(game, 'noAnswer');
+          }, game.options.questionTime);
+          this.emit('askQuestion', { game, question: game.data.question, wagers: game.data.wagers });
         },
 
         _onExit: function (game) {
@@ -207,13 +279,13 @@ async function GetGameFSM() {
 
           // check answer correctness
           if (closeEnough(guess, gd.question.answer, game.options.answerSimilarity)) {
-            gd.scores[player] += gd.question.cost;
+            gd.scores[player] += gd.wagers[player] ? gd.wagers[player] : gd.question.cost;
             gd.boardControl = player;
             this.emit('rightAnswer', { game, player, question: gd.question });
             this.transition(game, 'questionOver');
             return 'rightAnswer';
           } else {
-            gd.scores[player] -= gd.question.cost;
+            gd.scores[player] -= gd.wagers[player] ? gd.wagers[player] : gd.question.cost;
             gd.guesses[player] += 1;
             this.emit('wrongAnswer', { game, player, guess, question: gd.question });
             return 'wrongAnswer';
@@ -273,6 +345,10 @@ async function GetGameFSM() {
       return Object.entries(game.data.scores).sort((a, b) => b[1] - a[1]);
     },
 
+    GetValidWagerRange: function(game, player) {
+      return [5, Math.max(game.data.scores[player], game.data.round * 500)];
+    },
+
     Start: function (game, players) {
       this.handle(game, 'start', players);
     },
@@ -285,11 +361,27 @@ async function GetGameFSM() {
       return this.handle(game, 'chooseQuestion', category, level, player);
     },
 
+    Wager: function(game, player, amount) {
+      return this.handle(game, 'wager', player, amount);
+    },
+
     Command: function (game, player, command) {
       // if the line is in the form of a question, pass it into the fsm as a guess
       const matchGuess = /^(?:who|what|when|where)\s*(?:is|was|are)\s*(.*)/gmi.exec(command);
       if (matchGuess && matchGuess.length == 2) {
         return this.Guess(game, player, matchGuess[1]);
+      }
+
+      // wagers start with $, and can contain commas or periods. if they're not a number after that
+      // then don't accept it as a wager
+      if (command.startsWith('$')) {
+        const amount = parseInt(command.replace(/(\$|,|\.)/gmi, ''), 10);
+
+        if (isNaN(amount)) {
+          return;
+        }
+
+        return this.Wager(game, player, amount);
       }
 
       // if command contains "for" see if words before are a category and after is a number, handle as category selection

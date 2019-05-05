@@ -167,6 +167,10 @@ async function main() {
         } else if (status === 'wrongAnswer') {
           //msg.react('🔻').then(() => msg.react('💰'));
           msg.react('💸');
+        } else if (status === 'wager') {
+          msg.react('✅');
+        } else if (status === 'badWager') {
+          msg.react('🚫');
         }
       }
     }
@@ -228,8 +232,30 @@ async function main() {
     }
   });
 
-  JepFSM.on('askQuestion', ev => {
-    const embed = simpleEmbed(`${ev.question.category}: $${ev.question.cost}`, ev.question.question);
+  JepFSM.on('askWager', async ev => {
+    if (ev.type === 'dailydouble') {
+      const player = Object.keys(ev.wagers)[0];
+      const user = await client.fetchUser(player);
+      const range = JepFSM.GetValidWagerRange(ev.game, player);
+      const embed = simpleEmbed('Daily Double!', `${user}, say the dollar amount you wish to wager. You can wager between $${range[0]} and $${range[1]}`);
+
+      ev.game.channel.send(embed);
+    }
+  });
+
+  JepFSM.on('askQuestion', async ev => {
+    let question = '';
+    if (ev.wagers !== null) {
+      const wagers = Object.entries(ev.wagers);
+      for (let wager of wagers) {
+        wager[0] = await client.fetchUser(wager[0]);
+      }
+      question += '**Wagers**: ';
+      question += wagers.map(w => `${w[0]}: $${w[1]}`).join(', ');
+      question += '\n\n';
+    }
+    question += ev.question.question;
+    const embed = simpleEmbed(`${ev.question.category}: $${ev.question.cost}`, question);
     ev.game.channel.send(embed);
   });
 
