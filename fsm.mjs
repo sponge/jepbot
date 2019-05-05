@@ -116,6 +116,7 @@ async function GetGameFSM() {
           // add the questions into our board
           results.forEach(clue => {
             const idx = gd.categories.indexOf(clue.category);
+            // uncomment to print daily double locations
             // if (dailyDoubles.includes(clue)) {
             //   console.log(`${clue.category}, ${clue.level}`);
             // }
@@ -223,7 +224,7 @@ async function GetGameFSM() {
           // if the player hasn't bid, for daily doubles its the value of the clue, for final jeopardy it's everything
           for (const id in game.data.wagers) {
             if (game.data.wagers[id] === null) {
-              game.data.wagers[id] === game.data.round > game.options.numRounds ? game.data.question.cost : game.data.scores[id];
+              game.data.wagers[id] = game.data.round > game.options.numRounds ? game.data.question.cost : game.data.scores[id];
             }
           }
           clearTimeout(game.data.timer);
