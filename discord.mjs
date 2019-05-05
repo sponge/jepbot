@@ -140,7 +140,7 @@ async function main() {
       return;
     }
 
-    const args = msg.content.split(' ', 2);
+    const args = msg.content.split(' ');
 
     switch (args[0]) {
       case '!jeopardy': {
@@ -175,6 +175,30 @@ async function main() {
         const board = renderBoard(game);
         const embed = simpleEmbed(`Round ${game.data.round}`, board);
         game.channel.send(embed);
+        break;
+      }
+
+      case '!status': {
+        if (msg.author.tag !== 'sponge#6969') { break; }
+        let status = '\n';
+        status += `Running in ${client.guilds.size} servers\n`;
+        status += `Currently ${Object.keys(games).length} active games.\n`;
+        Object.entries(games).forEach(game => {
+          const channel = client.channels.get(game[0]);
+          status += `${channel.guild.name} - #${channel.name}: Round ${game[1].data.round} of ${game[1].options.numRounds}, ${game[1].data.questionsLeft} questions left\n`;
+        });
+
+        msg.reply(status);
+        break;
+      }
+
+      case '!announce': {
+        if (msg.author.tag !== 'sponge#6969') { break; }
+        if (!args[1]) { break; }
+        Object.entries(games).forEach(game => {
+          const channel = client.channels.get(game[0]);
+          channel.send(simpleEmbed("Announcement from Alex Trebek", args.slice(1).join(' ')));
+        });
         break;
       }
 
