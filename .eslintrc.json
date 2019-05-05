@@ -1,0 +1,22 @@
+{
+  "parserOptions": {
+    "ecmaVersion": 2017,
+    "sourceType": "module",
+    "ecmaFeatures": {
+      "experimentalObjectRestSpread": true
+    }
+  },
+  "rules": {
+    "indent": ["warn", 2],
+    "semi": "warn",
+    "no-console": "off",
+    "for-direction": "off",
+    "getter-return": "off",
+    "no-var": "warn"
+  },
+  "env": {
+    "es6": true,
+    "node": true
+  },
+  "extends": "eslint:recommended"
+}

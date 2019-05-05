@@ -8,7 +8,6 @@ import { promisify } from 'util';
 
 const readFile = promisify(fs.readFile);
 const writeFile = promisify(fs.writeFile);
-const access = promisify(fs.access);
 
 const emoji = {
   200: '<:jep200:573971965560356874>',
@@ -26,7 +25,7 @@ const emoji = {
 async function renderScores(client, fsm, game) {
   const scores = [];
 
-  for (let score of fsm.GetScores(game)) {
+  for (const score of fsm.GetScores(game)) {
     const user = await client.fetchUser(score[0]);
     const amount = score[1] < 0 ? `-$${Math.abs(score[1])}` : `$${score[1]}`;
     scores.push(`${user}: **${amount}**`);
@@ -57,7 +56,7 @@ function simpleEmbed(title, description) {
   return new Discord.RichEmbed()
     .setTitle(title)
     .setColor(0x000d8b)
-    .setDescription(description)
+    .setDescription(description);
 }
 
 function updateStats(stats, id, rightAnswer, amount) {
@@ -71,7 +70,7 @@ function updateStats(stats, id, rightAnswer, amount) {
   player.wrong += rightAnswer ? 0 : 1;
   player.accuracy = player.correct / (player.correct + player.wrong) * 100;
 
-  writeFile('./stats.json', JSON.stringify(stats));
+  writeFile('./stats.json', JSON.stringify(stats, null, 2));
 }
 
 async function main() {
@@ -81,7 +80,9 @@ async function main() {
   let stats = {};
   try {
     stats = JSON.parse(await readFile('./stats.json'));
-  } catch (e) { }
+  } catch (e) {
+    console.log("No stats.json found, starting new stats");
+  }
 
   const games = {};
 
@@ -103,15 +104,22 @@ async function main() {
         games[msg.channel.id] = newGame;
       }
     } else {
-      if (msg.content === '!scores') {
+      switch (msg.content) {
+      case '!scores': {
         const scores = await renderScores(client, JepFSM, game);
         const embed = simpleEmbed('Scores', scores);
         game.channel.send(embed);
-      } else if (msg.content === '!board') {
+        break;
+      }
+
+      case '!board': {
         const board = renderBoard(game);
         const embed = simpleEmbed(`Round ${game.data.round}`, board);
         game.channel.send(embed);
-      } else {
+        break;
+      }
+
+      default: {
         const status = JepFSM.Command(games[msg.channel.id], msg.author.id, msg.content);
         if (status === 'unknown') {
           msg.react('❓');
@@ -120,11 +128,8 @@ async function main() {
           msg.react('💸');
         }
       }
+      }
     }
-  });
-
-  JepFSM.on('gameStart', ev => {
-
   });
 
   JepFSM.on('roundStart', async ev => {
@@ -193,11 +198,11 @@ async function main() {
     const embed = simpleEmbed('Correct!', `${user} guessed "${ev.question.answer}" correctly.`);
     ev.game.channel.send(embed);
     updateStats(stats, ev.player, true, ev.question.cost);
-  })
+  });
 
   JepFSM.on('wrongAnswer', async ev => {
     updateStats(stats, ev.player, false, -ev.question.cost);
-  })
+  });
 
   JepFSM.on('noAnswer', ev => {
     const embed = simpleEmbed("Time's up!", `The answer is "${ev.question.answer}"`);

@@ -99,7 +99,7 @@ async function GetGameFSM() {
           gd.categories = _.uniq(results.map(o => o.category));
 
           // make empty arrays for each of our board cells and add the questions to them
-          gd.board = gd.categories.map(o => []);
+          gd.board = gd.categories.map(()=> []);
           results.forEach(clue => {
             const idx = gd.categories.indexOf(clue.category);
             gd.board[idx].push({ ...clue, enabled: true, cost: gd.round * clue.level * 200 });
@@ -308,7 +308,7 @@ async function GetGameFSM() {
 
         let level = amount / game.data.round;
         // allow "2 for 1600" or "2 for 16"
-        level /= level >= 100 ? 200 : 2
+        level /= level >= 100 ? 200 : 2;
 
         return this.ChooseQuestion(game, game.data.categories[categoryNum - 1], level, player);
       }
@@ -316,4 +316,4 @@ async function GetGameFSM() {
   });
 }
 
-export default GetGameFSM
+export default GetGameFSM;
