@@ -185,8 +185,8 @@ async function GetGameFSM() {
 
           setTimeout(() => {
             const nextState = game.data.question.dailyDouble ? 'askWager' : 'askQuestion';
-            this.transition(game, nextState, game.options.timeBeforeAskQuestion);
-          });
+            this.transition(game, nextState);
+          }, game.options.timeBeforeAskQuestion);
         }
       },
 
