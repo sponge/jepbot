@@ -20,6 +20,7 @@ const emoji = {
   1600: '<:jep1600:573971965614882866>',
   2000: '<:jep2000:573971965442916380>',
   empty: '<:jepempty:573971965573070858>',
+  glow: '<:jepglow:574412831714181120>',
 };
 
 async function renderScores(client, fsm, game) {
@@ -34,7 +35,7 @@ async function renderScores(client, fsm, game) {
   return scores.join(', ');
 }
 
-function renderScoreBoard(game) {
+function renderBoard(game) {
   const gd = game.data;
   let board = '';
   const maxCategoryLength = _.maxBy(gd.categories, c => c.length).length;
@@ -44,7 +45,7 @@ function renderScoreBoard(game) {
     board += `\`${i+1}.${header} \` `;
 
     for (let question of gd.board[i]) {
-      board += question.enabled ? emoji[question.cost] : emoji.empty;
+      board += gd.question === question ? emoji.glow : question.enabled ? emoji[question.cost] : emoji.empty;
     }
     board += '\n';
   }
@@ -107,7 +108,7 @@ async function main() {
         const embed = simpleEmbed('Scores', scores);
         game.channel.send(embed);
       } else if (msg.content === '!board') {
-        const board = renderScoreBoard(game);
+        const board = renderBoard(game);
         const embed = simpleEmbed(`Round ${game.data.round}`, board);
         game.channel.send(embed);      
       } else {
@@ -125,18 +126,20 @@ async function main() {
 
   });
 
-  JepFSM.on('roundStart', ev => {
-    const board = renderScoreBoard(ev.game);
+  JepFSM.on('roundStart', async ev => {
+    const board = renderBoard(ev.game);
     const embed = simpleEmbed(`Round ${ev.round}`, board);
-    ev.game.channel.send(embed);
+    ev.game.boardMessage = await ev.game.channel.send(embed);
   });
 
   JepFSM.on('questionSelectReady', async ev => {
     let board = '';
+    let saveMessage = false;
 
     // don't show the board if the round has just started
     if (ev.game.data.questionsAsked !== 0) {
-      board += renderScoreBoard(ev.game);
+      board += renderBoard(ev.game);
+      saveMessage = true;
     }
     
     const user = await client.fetchUser(ev.player);
@@ -149,10 +152,41 @@ async function main() {
     }
 
     const embed = simpleEmbed(`Round ${ev.game.data.round}`, board);
-    ev.game.channel.send(embed);
+    const msg = await ev.game.channel.send(embed);
+    if (saveMessage) {
+      ev.game.boardMessage = msg;
+    } else {
+      ev.game.shortMessage = msg;
+    }
   });
 
-  JepFSM.on('questionSelected', ev => {
+  JepFSM.on('questionSelected', async ev => {
+    if (!ev.game.boardMessage) {
+      return;
+    }
+
+    const user = await client.fetchUser(ev.player);
+    let board = renderBoard(ev.game);
+    board += `${user} selected ${ev.question.category} for $${ev.question.cost}`;
+
+    // don't show scores if its the start of round 1
+    if ((ev.game.data.questionsAsked === 0 && ev.game.data.round === 1) === false) {
+      const scores = await renderScores(client, JepFSM, ev.game);
+      board += `\n\n${scores}`;
+    }
+
+    const embed = simpleEmbed(`Round ${ev.game.data.round}`, board);
+    
+    ev.game.boardMessage.edit(embed);
+    ev.game.boardMessage = null;
+
+    if(ev.game.shortMessage) {
+      ev.game.shortMessage.delete();
+      ev.game.shortMessage = null;
+    }
+  });
+
+  JepFSM.on('askQuestion', ev => {
     const embed = simpleEmbed(`${ev.question.category}: $${ev.question.cost}`, ev.question.question);
     ev.game.channel.send(embed);
   });

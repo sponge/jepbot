@@ -29,9 +29,10 @@ async function GetGameFSM() {
 
     // fsm-specific options
     defaultGameOptions: {
-      questionTime: 20000,            // how long players have to answer the question
+      questionTime: 18000,            // how long players have to answer the question
       chooseQuestionTime: 15000,      // how long a player has to choose a question before a random one is picked
-      timeBetweenQuestions: 7000,     // how long in between question answer/timeout and the next question selection
+      timeBeforeAskQuestion: 5000,    // how long to wait after a question is chosen, to give people time to see the category
+      timeBetweenQuestions: 6000,     // how long in between question answer/timeout and the next question selection
       timeBetweenRounds: 14000,        // how long in between rounds
       timeAfterRoundStart: 8000,      // how long after the board is generated and the round starts
       autoPickQuestions: true,        // randomly choose questions in a round, or let players choose them
@@ -130,7 +131,6 @@ async function GetGameFSM() {
 
         _onExit: function(game) {
           clearTimeout(game.data.timer);
-          this.emit('questionSelected', {game, question: game.data.question});
         },
 
         chooseRandomQuestion: function(game) {
@@ -142,7 +142,7 @@ async function GetGameFSM() {
 
         // handle and validate question selection. category is the exact string of the
         // category of the question, level is 1-5
-        chooseQuestion: function(game, category, level, player) {          
+        chooseQuestion: async function(game, category, level, player) {          
           if (!game.options.autoPickQuestions && game.data.boardControl !== player) {
             return false;
           }
@@ -161,6 +161,9 @@ async function GetGameFSM() {
 
           // question is valid, move on to asking it
           game.data.question = question;
+          this.emit('questionSelected', {game, question: game.data.question, player: game.data.boardControl});
+          await delay(game.options.timeBeforeAskQuestion);
+          
           this.transition(game, 'askQuestion');
 
           return;
@@ -174,6 +177,7 @@ async function GetGameFSM() {
           game.data.guesses = {};
           // setup question timeout if no one answers in time
           game.timer = setTimeout(() => this.transition(game, 'noAnswer'), game.options.questionTime);
+          this.emit('askQuestion', {game, question: game.data.question});
         },
 
         _onExit: function(game) {
