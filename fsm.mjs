@@ -19,9 +19,6 @@ function trimmedSimilarity(a,b) {
 
 async function GetGameFSM() {
   const db = await sqlite.open('./clues.db', { Promise });
-  const clues = await db.all("select * from clues where airdate >= date('now','start of year','-10 year')");
-  console.log(clues.length);
-  global.clues = clues;
 
   return new machina.BehavioralFsm({
     namespace: 'jep',
