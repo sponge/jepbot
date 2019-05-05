@@ -98,7 +98,7 @@ async function main() {
 
     if (!game) {
       if (msg.content === '!jeopardy') {
-        const newGame = {channel: msg.channel, options: { autoPickQuestions: false, numCategoriesPerRound: 6, numRounds: 2 }};
+        const newGame = {channel: msg.channel};
         JepFSM.Start(newGame, [msg.author.id]);
         games[msg.channel.id] = newGame;
       }
@@ -135,14 +135,9 @@ async function main() {
 
   JepFSM.on('questionSelectReady', async ev => {
     let board = '';
-    let saveMessage = false;
 
-    // don't show the board if the round has just started
-    if (ev.game.data.questionsAsked !== 0) {
-      board += renderBoard(ev.game);
-      saveMessage = true;
-    }
-    
+    board += renderBoard(ev.game);
+
     const user = await client.fetchUser(ev.player);
     board += `${user}, select a question.`;
 
@@ -158,19 +153,16 @@ async function main() {
     }
 
     const embed = simpleEmbed(`Round ${ev.game.data.round}`, board);
-    const msg = await ev.game.channel.send(embed);
-    if (saveMessage) {
-      ev.game.boardMessage = msg;
+
+    if (ev.game.boardMessage) {
+      ev.game.boardMessage.edit(embed);
     } else {
-      ev.game.shortMessage = msg;
+      const msg = await ev.game.channel.send(embed);
+      ev.game.boardMessage = msg;
     }
   });
 
   JepFSM.on('questionSelected', async ev => {
-    if (!ev.game.boardMessage) {
-      return;
-    }
-
     const user = await client.fetchUser(ev.player);
     let board = renderBoard(ev.game);
     board += `${user} selected ${ev.question.category} for $${ev.question.cost}`;
@@ -183,12 +175,11 @@ async function main() {
 
     const embed = simpleEmbed(`Round ${ev.game.data.round}`, board);
     
-    ev.game.boardMessage.edit(embed);
-    ev.game.boardMessage = null;
-
-    if(ev.game.shortMessage) {
-      ev.game.shortMessage.delete();
-      ev.game.shortMessage = null;
+    if (ev.game.boardMessage) {
+      ev.game.boardMessage.edit(embed);
+      ev.game.boardMessage = null;
+    } else {
+      ev.game.channel.send(embed);
     }
   });
 

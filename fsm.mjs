@@ -35,7 +35,7 @@ async function GetGameFSM() {
       timeBetweenQuestions: 6000,     // how long in between question answer/timeout and the next question selection
       timeBetweenRounds: 14000,       // how long in between rounds
       timeAfterRoundStart: 8000,      // how long after the board is generated and the round starts
-      autoPickQuestions: true,        // randomly choose questions in a round, or let players choose them
+      autoPickQuestions: false,       // randomly choose questions in a round, or let players choose them
       numRounds: 2,                   // how many regular rounds in a game
       playFinalRound: false,          // run the final round after numRounds rounds are complete
       guessesPerQuestion: 1,          // let players guess multiple times per question
@@ -128,9 +128,13 @@ async function GetGameFSM() {
           // if auto pick is on, find a question still enabled and just ask it immediately
           if (game.options.autoPickQuestions) {
             this.handle(game, 'chooseRandomQuestion');
-          } else {  
-            this.emit('questionSelectReady', {game, board: game.data.board, player: game.data.boardControl});
-            game.data.timer = setTimeout(() => this.handle(game, 'chooseRandomQuestion'), game.options.chooseQuestionTime );
+          } else {
+            if (game.data.questionsLeft === 1) {
+              this.handle(game, 'chooseRandomQuestion');
+            } else {
+              this.emit('questionSelectReady', {game, board: game.data.board, player: game.data.boardControl});
+              game.data.timer = setTimeout(() => this.handle(game, 'chooseRandomQuestion'), game.options.chooseQuestionTime );
+            }
           }
         },
 
