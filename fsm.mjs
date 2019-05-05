@@ -26,8 +26,8 @@ async function GetGameFSM() {
 
     // fsm-specific options
     defaultGameOptions: {
-      questionTime: 18000,            // how long players have to answer the question
-      chooseQuestionTime: 15000,      // how long a player has to choose a question before a random one is picked
+      questionTime: 14000,            // how long players have to answer the question
+      chooseQuestionTime: 10000,      // how long a player has to choose a question before a random one is picked
       timeBeforeAskQuestion: 5000,    // how long to wait after a question is chosen, to give people time to see the category
       timeBetweenQuestions: 6000,     // how long in between question answer/timeout and the next question selection
       timeBetweenRounds: 14000,       // how long in between rounds
