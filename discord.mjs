@@ -28,7 +28,7 @@ async function renderScores(client, fsm, game) {
 
   for (let score of fsm.GetScores(game)) {
     const user = await client.fetchUser(score[0]);
-    const amount = score[1] < 0 ? `-$${score[1]}` : `$${score[1]}`;
+    const amount = score[1] < 0 ? `-$${Math.abs(score[1])}` : `$${score[1]}`;
     scores.push(`${user}: **${amount}**`);
   }
 
