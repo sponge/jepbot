@@ -295,25 +295,18 @@ async function GetGameFSM() {
           return;
         }
 
-        const playerCategory = matchSelection[1];
-        const categoryNum = parseInt(playerCategory);
+        const categoryNum = parseInt(matchSelection[1]);
         const amount = parseInt(matchSelection[2], 10);
-        const level = amount / game.data.round / 200;
 
-        if (isNaN(amount)) {
+        if (isNaN(amount) || isNaN(categoryNum)) {
           return;
         }
 
-        if (isNaN(categoryNum)) {
-          const distances = game.data.categories
-            .map(category => [category, trimmedSimilarity(playerCategory, category)])
-            .sort((a,b) => b[1].similarity - a[1].similarity);
+        let level = amount / game.data.round;
+        // allow "2 for 1600" or "2 for 16"
+        level /= level >= 100 ? 200 : 2
 
-          if (distances[0][1].similarity >= 0.5) {
-            return this.ChooseQuestion(game, game.data.categories.indexOf(distances[0][0]), level);
-          }
-        } else {
-          return this.ChooseQuestion(game, game.data.categories[categoryNum - 1], level, player);
+        return this.ChooseQuestion(game, game.data.categories[categoryNum - 1], level, player);
         }
       }
 
