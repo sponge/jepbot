@@ -2,3 +2,5 @@ node_modules
 j-archive
 config.mjs
 stats.json
+.DS_Store
+desktop.ini

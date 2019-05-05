@@ -33,13 +33,13 @@ async function GetGameFSM() {
       chooseQuestionTime: 15000,      // how long a player has to choose a question before a random one is picked
       timeBeforeAskQuestion: 5000,    // how long to wait after a question is chosen, to give people time to see the category
       timeBetweenQuestions: 6000,     // how long in between question answer/timeout and the next question selection
-      timeBetweenRounds: 14000,        // how long in between rounds
+      timeBetweenRounds: 14000,       // how long in between rounds
       timeAfterRoundStart: 8000,      // how long after the board is generated and the round starts
       autoPickQuestions: true,        // randomly choose questions in a round, or let players choose them
-      numRounds: 2,                  // how many regular rounds in a game
+      numRounds: 2,                   // how many regular rounds in a game
       playFinalRound: false,          // run the final round after numRounds rounds are complete
       guessesPerQuestion: 1,          // let players guess multiple times per question
-      answerSimilarity: 0.6,          // how close do answers need to be to be correct, uses damerau-lecenshtein string distance
+      answerSimilarity: 0.6,          // how close correct answers need to be, see trimmedSimilarity and closeEnough for how this is measured
       numCategoriesPerRound: 6,       // number of categories selected per round
     },
 
@@ -81,11 +81,20 @@ async function GetGameFSM() {
           const gd = game.data;
           gd.round += 1;
 
+          // the player in last place selects the first clue in all rounds after the first
+          if (gd.round !== 1) {
+            gd.boardControl = _.minBy(Object.entries(gd.scores), o => o[1])[0];
+          } 
+          
+          if (gd.boardControl === null) {
+            gd.boardControl = _.sample(Object.keys(gd.scores));
+          }
+
           // select a random x categories from the db, then select all the clues in that category
           const results = await db.all(`
           SELECT a.* FROM clues a
           INNER JOIN 
-            (SELECT DISTINCT category, game_id FROM clues WHERE round = ? AND airdate >= DATE('now', 'start of year', '-1 year') ORDER BY RANDOM() LIMIT ?) AS b
+            (SELECT DISTINCT category, game_id FROM clues WHERE round = ? AND airdate >= DATE('now', 'start of year', '-10 year') ORDER BY RANDOM() LIMIT ?) AS b
           ON a.category = b.category AND a.game_id = b.game_id
           `, gd.round, game.options.numCategoriesPerRound);
 
@@ -102,10 +111,6 @@ async function GetGameFSM() {
           // for easier tracking
           gd.questionsLeft = results.length;
           gd.questionsAsked = 0;
-
-          if (gd.boardControl === null) {
-            gd.boardControl = _.sample(Object.keys(gd.scores));
-          }
 
           // round is setup, move to select question phase
           this.emit('roundStart', {game, round: game.data.round});
