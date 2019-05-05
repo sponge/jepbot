@@ -3,6 +3,13 @@ import GetGameFSM from './fsm.mjs';
 import Discord from 'discord.js';
 import _ from 'lodash';
 
+import fs from 'fs';
+import {promisify} from 'util';
+
+const readFile = promisify(fs.readFile);
+const writeFile = promisify(fs.writeFile);
+const access = promisify(fs.access);
+
 const emoji = {
   200: '<:jep200:573971965560356874>',
   400: '<:jep400:573971965463756811>',
@@ -20,7 +27,8 @@ async function renderScores(client, fsm, game) {
 
   for (let score of fsm.GetScores(game)) {
     const user = await client.fetchUser(score[0]);
-    scores.push(`${user.username}: **$${score[1]}**`);
+    const amount = score[1] < 0 ? `-$${score[1]}` : `$${score[1]}`;
+    scores.push(`${user}: **${amount}**`);
   }
 
   return scores.join(', ');
@@ -51,9 +59,28 @@ function simpleEmbed(title, description) {
     .setDescription(description)
 }
 
+function updateStats(stats, id, rightAnswer, amount) {
+  if (!stats[id]) {
+    stats[id] = { earnings: 0, correct: 0, wrong: 0, accuracy: 0 };
+  }
+
+  const player = stats[id];
+  player.earnings += amount;
+  player.correct = rightAnswer ? 1 : 0;
+  player.wrong = rightAnswer ? 0 : 1;
+  player.accuracy = player.correct / (player.correct + player.wrong) * 100;
+
+  writeFile('./stats.json', JSON.stringify(stats));
+}
+
 async function main() {
   const JepFSM = await GetGameFSM();
   const client = new Discord.Client();
+
+  let stats = {};
+  try {
+    stats = JSON.parse(await readFile('./stats.json'));
+  } catch (e) { }
 
   const games = {};
 
@@ -70,7 +97,7 @@ async function main() {
 
     if (!game) {
       if (msg.content === '!jeopardy') {
-        const newGame = {channel: msg.channel, options: { autoPickQuestions: false, numCategoriesPerRound: 6 }};
+        const newGame = {channel: msg.channel, options: { autoPickQuestions: false, numCategoriesPerRound: 6, numRounds: 2 }};
         JepFSM.Start(newGame, [msg.author.id]);
         games[msg.channel.id] = newGame;
       }
@@ -134,12 +161,14 @@ async function main() {
     const scores = await renderScores(client, JepFSM, ev.game);
     const embed = simpleEmbed('Correct!', `"${ev.question.answer}" is the correct answer.\n${scores}`);
     ev.game.channel.send(embed);
+    updateStats(stats, ev.player, true, ev.question.cost);
   })
 
   JepFSM.on('wrongAnswer', async ev => {
     const scores = await renderScores(client, JepFSM, ev.game);
     const embed = simpleEmbed('Incorrect!', scores);
     ev.game.channel.send(embed);
+    updateStats(stats, ev.player, false, -ev.question.cost);
   })
 
   JepFSM.on('noAnswer', ev => {
@@ -154,7 +183,7 @@ async function main() {
   });
 
   JepFSM.on('gameOver', async ev => {
-    delete games[ev.game.channel];
+    delete games[ev.game.channel.id];
 
     const scores = await renderScores(client, JepFSM, ev.game);
     const embed = simpleEmbed('Game Over!', `${scores}\nThanks for playing!`);

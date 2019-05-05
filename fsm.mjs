@@ -19,7 +19,7 @@ function trimmedSimilarity(a,b) {
 
 async function GetGameFSM() {
   const db = await sqlite.open('./clues.db', { Promise });
-  const clues = await db.all("select * from clues where airdate >= date('now','start of year','-1 year')");
+  const clues = await db.all("select * from clues where airdate >= date('now','start of year','-10 year')");
   console.log(clues.length);
   global.clues = clues;
 
@@ -29,14 +29,14 @@ async function GetGameFSM() {
 
     // fsm-specific options
     defaultGameOptions: {
-      questionTime: 18000,            // how long players have to answer the question
-      chooseQuestionTIme: 10000,      // how long a player has to choose a question before a random one is picked
-      timeBetweenQuestions: 5000,     // how long in between question answer/timeout and the next question selection
-      timeBetweenRounds: 8000,        // how long in between rounds
+      questionTime: 20000,            // how long players have to answer the question
+      chooseQuestionTime: 15000,      // how long a player has to choose a question before a random one is picked
+      timeBetweenQuestions: 7000,     // how long in between question answer/timeout and the next question selection
+      timeBetweenRounds: 14000,        // how long in between rounds
       timeAfterRoundStart: 8000,      // how long after the board is generated and the round starts
       autoPickQuestions: true,        // randomly choose questions in a round, or let players choose them
-      gameRounds: 2,                  // how many regular rounds in a game
-      playFinalRound: false,          // run the final round after gameRounds rounds are complete
+      numRounds: 2,                  // how many regular rounds in a game
+      playFinalRound: false,          // run the final round after numRounds rounds are complete
       guessesPerQuestion: 1,          // let players guess multiple times per question
       answerSimilarity: 0.6,          // how close do answers need to be to be correct, uses damerau-lecenshtein string distance
       numCategoriesPerRound: 6,       // number of categories selected per round
@@ -124,7 +124,7 @@ async function GetGameFSM() {
             this.handle(game, 'chooseRandomQuestion');
           } else {  
             this.emit('questionSelectReady', {game, board: game.data.board, player: game.data.boardControl});
-            game.data.timer = setTimeout(() => this.handle(game, 'chooseRandomQuestion'), game.options.chooseQuestionTIme );
+            game.data.timer = setTimeout(() => this.handle(game, 'chooseRandomQuestion'), game.options.chooseQuestionTime );
           }
         },
 
@@ -241,7 +241,7 @@ async function GetGameFSM() {
         _onEnter: async function(game) {
           // check if we need to move into final jeopardy
           await delay(game.options.timeBetweenRounds);
-          if (game.data.round === game.options.gameRounds) {
+          if (game.data.round === game.options.numRounds) {
             if (game.options.playFinalRound) {
               // move into final round
             } else {
@@ -262,7 +262,7 @@ async function GetGameFSM() {
     },
 
     GetScores: function(game) {
-      return Object.entries(game.data.scores).sort((a,b) => a[1] - b[1]);
+      return Object.entries(game.data.scores).sort((a,b) => b[1] - a[1]);
     },
     
     Start: function(game, players) {
