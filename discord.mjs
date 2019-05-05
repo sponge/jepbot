@@ -144,7 +144,12 @@ async function main() {
     }
     
     const user = await client.fetchUser(ev.player);
-    board += `${user}, you're in control. Select a category by saying "(number) for (value)."`;
+    board += `${user}, select a question.`;
+
+    // don't show help text the whole game
+    if (ev.game.data.round === 1 && ev.game.data.questionsAsked <= 4) {
+      board += '\nSelect a category by saying "`(number)` for `(value)`."';
+    }
 
     // don't show scores if its the start of round 1
     if ((ev.game.data.questionsAsked === 0 && ev.game.data.round === 1) === false) {
@@ -193,8 +198,8 @@ async function main() {
   });
 
   JepFSM.on('rightAnswer', async ev => {
-    const scores = await renderScores(client, JepFSM, ev.game);
-    const embed = simpleEmbed('Correct!', `"${ev.question.answer}" is the correct answer.\n${scores}`);
+    const user = await client.fetchUser(ev.player);
+    const embed = simpleEmbed('Correct!', `${user} guessed "${ev.question.answer}" correctly.`);
     ev.game.channel.send(embed);
     updateStats(stats, ev.player, true, ev.question.cost);
   })

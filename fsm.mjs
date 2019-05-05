@@ -129,10 +129,6 @@ async function GetGameFSM() {
           }
         },
 
-        _onExit: function(game) {
-          clearTimeout(game.data.timer);
-        },
-
         chooseRandomQuestion: function(game) {
           const questions = _.flatten(game.data.board).filter(clue => clue.enabled);
           const choice = _.sample(questions);
@@ -162,6 +158,7 @@ async function GetGameFSM() {
           // question is valid, move on to asking it
           game.data.question = question;
           this.emit('questionSelected', {game, question: game.data.question, player: game.data.boardControl});
+          clearTimeout(game.data.timer);
 
           setTimeout(() => this.transition(game, 'askQuestion'), game.options.timeBeforeAskQuestion);
 
