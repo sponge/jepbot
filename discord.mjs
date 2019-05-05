@@ -52,6 +52,37 @@ function renderBoard(game) {
   return board;
 }
 
+async function renderLifetimeStats(client, stats) {
+  const earnings = Object.entries(stats)
+    .sort((a, b) => b[1].earnings - a[1].earnings)
+    .slice(0, 10);
+
+  const accuracy = Object.entries(stats)
+    .sort((a, b) => b[1].accuracy - a[1].accuracy)
+    /*.filter(o => o.correct + o.wrong >= 10).*/
+    .slice(0, 10);
+
+  const embed = new Discord.RichEmbed()
+    .setTitle("Hall of Fame")
+    .setColor(0x000d8b);
+
+  let earningsStr = '';
+  for (const score of earnings) {
+    const user = await client.fetchUser(score[0]);
+    earningsStr += `${user}: $${score[1].earnings}\n`;
+  }
+  embed.addField('Earnings', earningsStr, true);
+
+  let accuracyStr = '';
+  for (const score of accuracy) {
+    const user = await client.fetchUser(score[0]);
+    accuracyStr += `${user}: ${score[1].accuracy.toFixed(1)}%\n`;
+  }
+  embed.addField('Accuracy', accuracyStr, true);
+
+  return embed;
+}
+
 function simpleEmbed(title, description) {
   return new Discord.RichEmbed()
     .setTitle(title)
@@ -98,36 +129,53 @@ async function main() {
     }
 
     if (!game) {
-      if (msg.content === '!jeopardy') {
-        const newGame = { channel: msg.channel };
-        JepFSM.Start(newGame, [msg.author.id]);
-        games[msg.channel.id] = newGame;
+      switch (msg.content) {
+        case '!jeopardy': {
+          const newGame = { channel: msg.channel };
+          JepFSM.Start(newGame, [msg.author.id]);
+          games[msg.channel.id] = newGame;
+          break;
+        }
+
+        case '!stats': {
+          const statsEmbed = await renderLifetimeStats(client, stats);
+          msg.reply(statsEmbed);
+          break;
+        }
+
       }
+
     } else {
       switch (msg.content) {
-      case '!scores': {
-        const scores = await renderScores(client, JepFSM, game);
-        const embed = simpleEmbed('Scores', scores);
-        game.channel.send(embed);
-        break;
-      }
-
-      case '!board': {
-        const board = renderBoard(game);
-        const embed = simpleEmbed(`Round ${game.data.round}`, board);
-        game.channel.send(embed);
-        break;
-      }
-
-      default: {
-        const status = JepFSM.Command(games[msg.channel.id], msg.author.id, msg.content);
-        if (status === 'unknown') {
-          msg.react('❓');
-        } else if (status === 'wrongAnswer') {
-          //msg.react('🔻').then(() => msg.react('💰'));
-          msg.react('💸');
+        case '!scores': {
+          const scores = await renderScores(client, JepFSM, game);
+          const embed = simpleEmbed('Scores', scores);
+          game.channel.send(embed);
+          break;
         }
-      }
+
+        case '!board': {
+          const board = renderBoard(game);
+          const embed = simpleEmbed(`Round ${game.data.round}`, board);
+          game.channel.send(embed);
+          break;
+        }
+
+        case '!stats': {
+          const embedStats = renderLifetimeStats(stats);
+          game.channel.send(embedStats);
+          break;
+        }
+
+        default: {
+          const status = JepFSM.Command(games[msg.channel.id], msg.author.id, msg.content);
+          if (status === 'unknown') {
+            msg.react('❓');
+          } else if (status === 'wrongAnswer') {
+            //msg.react('🔻').then(() => msg.react('💰'));
+            msg.react('💸');
+          }
+        }
       }
     }
   });

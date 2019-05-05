@@ -7,7 +7,7 @@
     }
   },
   "rules": {
-    "indent": ["warn", 2],
+    "indent": ["warn", 2, {"SwitchCase": 1}],
     "semi": "warn",
     "no-console": "off",
     "for-direction": "off",
