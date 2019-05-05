@@ -94,8 +94,8 @@ async function GetGameFSM() {
           const results = await db.all(`
           SELECT a.* FROM clues a
           INNER JOIN 
-            (SELECT DISTINCT category, game_id FROM clues WHERE round = ? AND airdate >= DATE('now', 'start of year', '-10 year') ORDER BY RANDOM() LIMIT ?) AS b
-          ON a.category = b.category AND a.game_id = b.game_id
+            (SELECT DISTINCT category, game_id, round FROM clues WHERE round = ? AND airdate >= DATE('now', 'start of year', '-10 year') ORDER BY RANDOM() LIMIT ?) AS b
+          ON a.category = b.category AND a.game_id = b.game_id AND a.round = b.round
           `, gd.round, game.options.numCategoriesPerRound);
 
           // get a list of our categories
@@ -108,9 +108,9 @@ async function GetGameFSM() {
 
           results.forEach(clue => {
             const idx = gd.categories.indexOf(clue.category);
-            if (dailyDoubles.includes(clue)) {
-              console.log(`${clue.category}, ${clue.level}`);
-            }
+            // if (dailyDoubles.includes(clue)) {
+            //   console.log(`${clue.category}, ${clue.level}`);
+            // }
             gd.board[idx].push({
               ...clue,
               enabled: true,
