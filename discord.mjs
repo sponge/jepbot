@@ -128,53 +128,45 @@ async function main() {
       return;
     }
 
-    if (!game) {
-      switch (msg.content) {
-        case '!jeopardy': {
-          const newGame = { channel: msg.channel };
-          JepFSM.Start(newGame, [msg.author.id]);
-          games[msg.channel.id] = newGame;
-          break;
-        }
-
-        case '!stats': {
-          const statsEmbed = await renderLifetimeStats(client, stats);
-          msg.reply(statsEmbed);
-          break;
-        }
-
+    switch (msg.content) {
+      case '!jeopardy': {
+        if (game) { break; }
+        const newGame = { channel: msg.channel };
+        JepFSM.Start(newGame, [msg.author.id]);
+        games[msg.channel.id] = newGame;
+        break;
       }
 
-    } else {
-      switch (msg.content) {
-        case '!scores': {
-          const scores = await renderScores(client, JepFSM, game);
-          const embed = simpleEmbed('Scores', scores);
-          game.channel.send(embed);
-          break;
-        }
+      case '!stats': {
+        const statsEmbed = await renderLifetimeStats(client, stats);
+        msg.reply(statsEmbed);
+        break;
+      }
 
-        case '!board': {
-          const board = renderBoard(game);
-          const embed = simpleEmbed(`Round ${game.data.round}`, board);
-          game.channel.send(embed);
-          break;
-        }
+      case '!scores': {
+        if (!game) { break; }
+        const scores = await renderScores(client, JepFSM, game);
+        const embed = simpleEmbed('Scores', scores);
+        game.channel.send(embed);
+        break;
+      }
 
-        case '!stats': {
-          const embedStats = renderLifetimeStats(stats);
-          game.channel.send(embedStats);
-          break;
-        }
+      case '!board': {
+        if (!game) { break; }
+        const board = renderBoard(game);
+        const embed = simpleEmbed(`Round ${game.data.round}`, board);
+        game.channel.send(embed);
+        break;
+      }
 
-        default: {
-          const status = JepFSM.Command(games[msg.channel.id], msg.author.id, msg.content);
-          if (status === 'unknown') {
-            msg.react('❓');
-          } else if (status === 'wrongAnswer') {
-            //msg.react('🔻').then(() => msg.react('💰'));
-            msg.react('💸');
-          }
+      default: {
+        if (!game) { break; }
+        const status = JepFSM.Command(games[msg.channel.id], msg.author.id, msg.content);
+        if (status === 'unknown') {
+          msg.react('❓');
+        } else if (status === 'wrongAnswer') {
+          //msg.react('🔻').then(() => msg.react('💰'));
+          msg.react('💸');
         }
       }
     }
