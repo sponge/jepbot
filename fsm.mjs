@@ -39,7 +39,7 @@ async function GetGameFSM() {
       answerSimilarity: 0.6,          // how close correct answers need to be, see trimmedSimilarity and closeEnough for how this is measured
       numCategoriesPerRound: 6,       // number of categories selected per round
       numDailyDoublesPerRound: 2,     // number of daily doubles to randomly distribute through the board. 0 to disable
-      wagerTime: 10000,               // how long a player has to wager for daily double/final jeopardy
+      wagerTime: 15000,               // how long a player has to wager for daily double/final jeopardy
     },
 
     states: {
