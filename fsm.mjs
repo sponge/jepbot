@@ -236,7 +236,8 @@ async function GetGameFSM() {
 
           this.emit('onWager', {game, player, amount});
 
-          if (null in Object.values(gd.wagers) === false) {
+          // if no more wagers are left, move on to asking the question immediately
+          if (!Object.values(gd.wagers).includes(null)) {
             this.transition(game, 'askQuestion');
           }
 
