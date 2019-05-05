@@ -5,18 +5,29 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Python: Current File",
+      "type": "python",
+      "request": "launch",
+      "program": "${file}",
+      "console": "integratedTerminal"
+    },
+    {
       "type": "node",
       "request": "launch",
       "name": "Launch Console Game",
       "program": "${workspaceFolder}/console.mjs",
-      "runtimeArgs": ["--experimental-modules"]
+      "runtimeArgs": [
+        "--experimental-modules"
+      ]
     },
     {
       "type": "node",
       "request": "launch",
       "name": "Launch Discord Bot",
       "program": "${workspaceFolder}/discord.mjs",
-      "runtimeArgs": ["--experimental-modules"]
+      "runtimeArgs": [
+        "--experimental-modules"
+      ]
     }
   ]
 }
