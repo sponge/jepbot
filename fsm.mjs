@@ -277,15 +277,20 @@ async function GetGameFSM() {
             return;
           }
 
+          // if the question has wagers and they're not wagering, can't answer
+          if (gd.wagers && !gd.wagers[player]) {
+            return;
+          }
+
           // check answer correctness
           if (closeEnough(guess, gd.question.answer, game.options.answerSimilarity)) {
-            gd.scores[player] += gd.wagers[player] ? gd.wagers[player] : gd.question.cost;
+            gd.scores[player] += gd.wagers && gd.wagers[player] ? gd.wagers[player] : gd.question.cost;
             gd.boardControl = player;
             this.emit('rightAnswer', { game, player, question: gd.question });
             this.transition(game, 'questionOver');
             return 'rightAnswer';
           } else {
-            gd.scores[player] -= gd.wagers[player] ? gd.wagers[player] : gd.question.cost;
+            gd.scores[player] -= gd.wagers && gd.wagers[player] ? gd.wagers[player] : gd.question.cost;
             gd.guesses[player] += 1;
             this.emit('wrongAnswer', { game, player, guess, question: gd.question });
             return 'wrongAnswer';
