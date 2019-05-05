@@ -412,6 +412,10 @@ async function GetGameFSM() {
         return this.Wager(game, player, amount);
       }
 
+      if (/(?:make|do).*(?:real|true).*daily double/gm.test(command)) {
+        return this.Wager(game, player, game.data.scores[player]);
+      }
+
       // if command contains "for" see if words before are a category and after is a number, handle as category selection
       if (!game.options.autoPickQuestions) {
         const matchSelection = /(.*) for \$?(\d*)/gmi.exec(command);
