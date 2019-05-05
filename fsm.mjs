@@ -52,6 +52,12 @@ async function GetGameFSM() {
 
         start: function (game, players) {
           game.options = { ...this.defaultGameOptions, ...game.options };
+
+          // these two options don't make sense together
+          if (game.options.autoPickQuestions) {
+            game.options.numDailyDoublesPerRound = 0;
+          }
+  
           game.data = {
             round: 0,
             categories: [],
