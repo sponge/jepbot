@@ -172,6 +172,11 @@ async function GetGameFSM() {
         // handle and validate question selection. category is the exact string of the
         // category of the question, level is 1-5
         chooseQuestion: function (game, category, level, player) {
+          // because we setTimeout before switching states, don't let the question be set twice
+          if (game.data.question !== null) {
+            return;
+          }
+
           // don't let players not in control of the board pick a question
           if (!game.options.autoPickQuestions && game.data.boardControl !== player) {
             return 'unknown';
