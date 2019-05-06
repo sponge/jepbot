@@ -40,6 +40,8 @@ async function GetGameFSM() {
       numCategoriesPerRound: 6,       // number of categories selected per round
       numDailyDoublesPerRound: 2,     // number of daily doubles to randomly distribute through the board. 0 to disable
       wagerTime: 15000,               // how long a player has to wager for daily double/final jeopardy
+      useBuzzer: false,
+      buzzerQuestionTime: 8000,
     },
 
     states: {
@@ -68,7 +70,9 @@ async function GetGameFSM() {
             questionsAsked: 0,
             questionsLeft: 0,
             boardControl: null,
-            timer: 0
+            buzzPlayer: null,
+            timer: 0,
+            buzzTimer: null,
           };
 
           if (players) {
@@ -263,6 +267,16 @@ async function GetGameFSM() {
         _onEnter: function (game) {
           game.data.question.enabled = false;
           game.data.guesses = {};
+          game.data.buzzPlayer = null;
+          this.handle(game, 'startTimer');
+          this.emit('askQuestion', { game, question: game.data.question, wagers: game.data.wagers });
+        },
+
+        _onExit: function (game) {
+          clearTimeout(game.timer);
+        },
+
+        startTimer: function(game) {
           // setup question timeout if no one answers in time
           game.timer = setTimeout(() => {
             // if we timeout, anyone who wagers on the question and hasn't answered automatically loses the money
@@ -273,16 +287,54 @@ async function GetGameFSM() {
             }
             // move on to the end of the answer
             this.transition(game, 'noAnswer');
-          }, game.options.questionTime);
-          this.emit('askQuestion', { game, question: game.data.question, wagers: game.data.wagers });
+          }, game.options.useBuzzer ? game.options.buzzerQuestionTime : game.options.questionTime);
         },
 
-        _onExit: function (game) {
+        buzz: function (game, player) {
+          const gd = game.data;
+
+          if (game.options.useBuzzer === false) {
+            return;
+          }
+
+          if (gd.buzzPlayer !== null) {
+            return;
+          }
+
+          if (!this.handle(game, 'canAnswer', player)) {
+            return;
+          }
+
+          gd.buzzPlayer = player;
+          this.emit('onBuzz', { game, player });
           clearTimeout(game.timer);
+          setTimeout(() => this.handle(game, 'wrongAnswer', game.data.buzzPlayer), game.options.questionTime);
         },
 
-        // handle guesses from player
-        guess: function (game, player, guess) {
+        rightAnswer: function (game, player) {
+          const gd = game.data;
+          gd.scores[player] += gd.wagers && gd.wagers[player] ? gd.wagers[player] : gd.question.cost;
+          gd.boardControl = player;
+          this.emit('rightAnswer', { game, player, question: gd.question });
+          this.transition(game, 'questionOver');
+          return 'rightAnswer';
+        },
+
+        wrongAnswer: function (game, player, guess) {
+          const gd = game.data;
+          gd.scores[player] -= gd.wagers && gd.wagers[player] ? gd.wagers[player] : gd.question.cost;
+          gd.guesses[player] += 1;
+          gd.buzzPlayer = null;
+          this.emit('wrongAnswer', { game, player, guess, question: gd.question });
+          if (game.options.useBuzzer) {
+            clearTimeout(gd.buzzTimer);
+            gd.buzzTimer = null;
+            this.handle(game, 'startTimer');
+          }
+          return 'wrongAnswer';
+        },
+
+        canAnswer: function(game, player) {
           const gd = game.data;
 
           // if they're a new player, set them up
@@ -297,26 +349,36 @@ async function GetGameFSM() {
 
           // too many guesses
           if (gd.guesses[player] >= game.options.guessesPerQuestion) {
-            return;
+            return false;
           }
 
           // if the question has wagers and they're not wagering, can't answer
           if (gd.wagers && !gd.wagers[player]) {
+            return false;
+          }
+
+          return true;
+        },
+
+        // handle guesses from player
+        guess: function (game, player, guess) {
+          const gd = game.data;
+
+          const canAnswer = this.handle(game, 'canAnswer', player);
+          if (!canAnswer) {
+            return;
+          }
+
+          // don't allow guess if there are buzzers and they're not the buzzed player
+          if (game.options.useBuzzer && player !== gd.buzzPlayer && !gd.wagers) {
             return;
           }
 
           // check answer correctness
           if (closeEnough(guess, gd.question.answer, game.options.answerSimilarity)) {
-            gd.scores[player] += gd.wagers && gd.wagers[player] ? gd.wagers[player] : gd.question.cost;
-            gd.boardControl = player;
-            this.emit('rightAnswer', { game, player, question: gd.question });
-            this.transition(game, 'questionOver');
-            return 'rightAnswer';
+            return this.handle(game, 'rightAnswer', player);
           } else {
-            gd.scores[player] -= gd.wagers && gd.wagers[player] ? gd.wagers[player] : gd.question.cost;
-            gd.guesses[player] += 1;
-            this.emit('wrongAnswer', { game, player, guess, question: gd.question });
-            return 'wrongAnswer';
+            return this.handle(game, 'wrongAnswer', player, guess);
           }
         }
       },
@@ -391,6 +453,10 @@ async function GetGameFSM() {
 
     Wager: function (game, player, amount) {
       return this.handle(game, 'wager', player, amount);
+    },
+
+    Buzz: function (game, player) {
+      return this.handle(game, 'buzz', player);
     },
 
     Command: function (game, player, command) {

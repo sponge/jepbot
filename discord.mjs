@@ -31,6 +31,11 @@ const rulesPresets = {
   quick: {
     description: 'A shorter experience to just chill and answer questions. 1 round, questions are randomly picked.',
     options: { numRounds: 1, autoPickQuestions: true }
+  },
+
+  buzz: {
+    description: 'Join a voice channel and use your push to talk or say "." to buzz in before answering.',
+    options: { useBuzzer: true }
   }
 };
 
@@ -95,6 +100,58 @@ async function renderLifetimeStats(client, stats) {
   return embed;
 }
 
+async function renderBoardMessage(client, fsm, game) {
+  const gd = game.data;
+  let board = '';
+
+  board += renderBoard(game);
+
+  if (!gd.question) {
+    const user = await client.fetchUser(gd.boardControl);
+    board += `${user}, select a question.`;
+
+    // don't show help text the whole game
+    if (gd.round === 1 && gd.questionsAsked <= 4) {
+      board += '\nSelect a category by saying "`(number)` for `(value)`."';
+    }
+  } else {
+    const user = await client.fetchUser(gd.boardControl);
+    board += `${user} selected ${gd.question.category} for $${gd.question.cost}`;
+  }
+
+  // don't show scores if its the start of round 1
+  if ((gd.questionsAsked === 0 && gd.round === 1) === false) {
+    const scores = await renderScores(client, fsm, game);
+    board += `\n\n${scores}`;
+  }
+
+  return simpleEmbed(`Round ${gd.round}`, board);
+}
+
+async function renderQuestion(game, client) {
+  const gd = game.data;
+  let question = '';
+  if (gd.wagers !== null) {
+    const wagers = Object.entries(gd.wagers);
+    for (let wager of wagers) {
+      wager[0] = await client.fetchUser(wager[0]);
+    }
+    question += '**Wagers**: ';
+    question += wagers.map(w => `${w[0]}: $${w[1]}`).join(', ');
+    question += '\n\n';
+  }
+  question += gd.question.question;
+
+  if (game.options.useBuzzer && !gd.buzzPlayer && !gd.wagers) {
+    question += '\n\n**BUZZ IN NOW!**';
+  } else if (gd.buzzPlayer) {        
+    const user = await client.fetchUser(gd.buzzPlayer);
+    question += `\n\n${user}, please give your answer.`;
+  }
+
+  return simpleEmbed(`${gd.question.category}: $${gd.question.cost}`, question);
+}
+
 function simpleEmbed(title, description) {
   return new Discord.RichEmbed()
     .setTitle(title)
@@ -128,6 +185,7 @@ async function main() {
   }
 
   const games = {};
+  const voiceGames = {};
 
   client.on('ready', () => {
     console.log(`Logged in as ${client.user.tag}!`);
@@ -151,8 +209,20 @@ async function main() {
         }
 
         const newGame = { channel: msg.channel, options: rulesPresets[args[1]].options };
+
+        if (args[1] === 'buzz') {
+          if (!msg.member.voiceChannel) {
+            msg.reply('join a voice channel to play with buzzers.');
+            break;
+          }
+
+          await msg.member.voiceChannel.join();
+          voiceGames[msg.member.voiceChannel] = newGame;
+        }
+
         JepFSM.Start(newGame, [msg.author.id]);
         games[msg.channel.id] = newGame;
+        voiceGames[msg.member.voiceChannelID] = newGame;
         break;
       }
 
@@ -202,6 +272,17 @@ async function main() {
         break;
       }
 
+      case '.': {
+        const game = games[msg.channel.id];
+
+        if (!game) {
+          return;
+        }
+    
+        JepFSM.Buzz(game, msg.author.id);   
+        break;     
+      }
+
       default: {
         if (!game) { break; }
         const status = JepFSM.Command(games[msg.channel.id], msg.author.id, msg.content);
@@ -219,6 +300,16 @@ async function main() {
     }
   });
 
+  client.on('guildMemberSpeaking', (member, speaking) => {
+    const game = voiceGames[member.voiceChannelID];
+
+    if (!game || !speaking) {
+      return;
+    }
+
+    JepFSM.Buzz(game, member.id);
+  });
+
   JepFSM.on('roundStart', async ev => {
     const board = renderBoard(ev.game);
     const embed = simpleEmbed(`Round ${ev.round}`, board);
@@ -226,52 +317,31 @@ async function main() {
   });
 
   JepFSM.on('questionSelectReady', async ev => {
-    let board = '';
+    const embed = await renderBoardMessage(client, JepFSM, ev.game);
+    const msg = await ev.game.channel.send(embed);
+    ev.game.boardMessage = msg;
+  });
 
-    board += renderBoard(ev.game);
-
-    const user = await client.fetchUser(ev.player);
-    board += `${user}, select a question.`;
-
-    // don't show help text the whole game
-    if (ev.game.data.round === 1 && ev.game.data.questionsAsked <= 4) {
-      board += '\nSelect a category by saying "`(number)` for `(value)`."';
-    }
-
-    // don't show scores if its the start of round 1
-    if ((ev.game.data.questionsAsked === 0 && ev.game.data.round === 1) === false) {
-      const scores = await renderScores(client, JepFSM, ev.game);
-      board += `\n\n${scores}`;
-    }
-
-    const embed = simpleEmbed(`Round ${ev.game.data.round}`, board);
-
+  JepFSM.on('questionSelected', async ev => {
+    const embed = await renderBoardMessage(client, JepFSM, ev.game);
+  
     if (ev.game.boardMessage) {
       ev.game.boardMessage.edit(embed);
+      ev.game.boardMessage = null;
     } else {
       const msg = await ev.game.channel.send(embed);
       ev.game.boardMessage = msg;
     }
   });
 
-  JepFSM.on('questionSelected', async ev => {
-    const user = await client.fetchUser(ev.player);
-    let board = renderBoard(ev.game);
-    board += `${user} selected ${ev.question.category} for $${ev.question.cost}`;
-
-    // don't show scores if its the start of round 1
-    if ((ev.game.data.questionsAsked === 0 && ev.game.data.round === 1) === false) {
-      const scores = await renderScores(client, JepFSM, ev.game);
-      board += `\n\n${scores}`;
-    }
-
-    const embed = simpleEmbed(`Round ${ev.game.data.round}`, board);
+  JepFSM.on('onBuzz', async ev => {
+    const embed = await renderQuestion(ev.game, client);
 
     if (ev.game.boardMessage) {
       ev.game.boardMessage.edit(embed);
-      ev.game.boardMessage = null;
     } else {
-      ev.game.channel.send(embed);
+      const msg = await ev.game.channel.send(embed);
+      ev.game.boardMessage = msg;
     }
   });
 
@@ -287,34 +357,42 @@ async function main() {
   });
 
   JepFSM.on('askQuestion', async ev => {
-    let question = '';
-    if (ev.wagers !== null) {
-      const wagers = Object.entries(ev.wagers);
-      for (let wager of wagers) {
-        wager[0] = await client.fetchUser(wager[0]);
-      }
-      question += '**Wagers**: ';
-      question += wagers.map(w => `${w[0]}: $${w[1]}`).join(', ');
-      question += '\n\n';
+    const embed = await renderQuestion(ev.game, client);
+
+    if (ev.game.boardMessage) {
+      ev.game.boardMessage.edit(embed);
+    } else {
+      const msg = await ev.game.channel.send(embed);
+      ev.game.boardMessage = msg;
     }
-    question += ev.question.question;
-    const embed = simpleEmbed(`${ev.question.category}: $${ev.question.cost}`, question);
-    ev.game.channel.send(embed);
   });
 
   JepFSM.on('rightAnswer', async ev => {
     const user = await client.fetchUser(ev.player);
     const embed = simpleEmbed('Correct!', `${user} guessed "${ev.question.answer}" correctly.`);
+    ev.game.boardMessage = null;
     ev.game.channel.send(embed);
     updateStats(stats, ev.player, true, ev.question.cost);
   });
 
   JepFSM.on('wrongAnswer', async ev => {
     updateStats(stats, ev.player, false, -ev.question.cost);
+
+    if (ev.game.options.useBuzzer) {
+      const embed = await renderQuestion(ev.game, client);
+
+      if (ev.game.boardMessage) {
+        ev.game.boardMessage.edit(embed);
+      } else {
+        const msg = await ev.game.channel.send(embed);
+        ev.game.boardMessage = msg;
+      }
+    }
   });
 
   JepFSM.on('noAnswer', ev => {
     const embed = simpleEmbed("Time's up!", `The answer is "${ev.question.answer}"`);
+    ev.game.boardMessage = null;
     ev.game.channel.send(embed);
   });
 
