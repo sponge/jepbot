@@ -34,7 +34,7 @@ const rulesPresets = {
   },
 
   buzz: {
-    description: 'Join a voice channel and use your push to talk or say "." to buzz in before answering.',
+    description: '(Very WIP!) Join a voice channel and use your push to talk or say "." to buzz in before answering.',
     options: { useBuzzer: true }
   }
 };
@@ -204,7 +204,8 @@ async function main() {
       case '!jeopardy': {
         if (game) { break; }
         if (!args[1] || args[1] in rulesPresets === false) {
-          msg.reply(Object.entries(rulesPresets).map(o => `\n!jeopardy ${o[0]}: ${o[1].description}`));
+          const choices = Object.entries(rulesPresets).map(o => `**!jeopardy ${o[0]}**: ${o[1].description}`).join('\n');
+          msg.reply('\n' + choices);
           break;
         }
 
@@ -318,8 +319,13 @@ async function main() {
 
   JepFSM.on('questionSelectReady', async ev => {
     const embed = await renderBoardMessage(client, JepFSM, ev.game);
-    const msg = await ev.game.channel.send(embed);
-    ev.game.boardMessage = msg;
+    
+    if (ev.game.boardMessage) {
+      ev.game.boardMessage.edit(embed);
+    } else {
+      const msg = await ev.game.channel.send(embed);
+      ev.game.boardMessage = msg;
+    }
   });
 
   JepFSM.on('questionSelected', async ev => {

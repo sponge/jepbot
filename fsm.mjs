@@ -3,6 +3,7 @@ import machina from 'machina';
 import delay from 'delay';
 import distance from 'damerau-levenshtein';
 import _ from 'lodash';
+import assert from 'assert';
 
 // drop all whitespace, and all symbols, and make lower case
 function closeEnough(a, b, similarity) {
@@ -228,7 +229,7 @@ async function GetGameFSM() {
           // if the player hasn't bid, for daily doubles its the value of the clue, for final jeopardy it's everything
           for (const id in game.data.wagers) {
             if (game.data.wagers[id] === null) {
-              game.data.wagers[id] = game.data.round > game.options.numRounds ? game.data.question.cost : game.data.scores[id];
+              game.data.wagers[id] = game.data.round <= game.options.numRounds ? game.data.question.cost : game.data.scores[id];
             }
           }
           clearTimeout(game.data.timer);
@@ -276,7 +277,7 @@ async function GetGameFSM() {
           clearTimeout(game.timer);
         },
 
-        startTimer: function(game) {
+        startTimer: function (game) {
           // setup question timeout if no one answers in time
           game.timer = setTimeout(() => {
             // if we timeout, anyone who wagers on the question and hasn't answered automatically loses the money
@@ -334,8 +335,11 @@ async function GetGameFSM() {
           return 'wrongAnswer';
         },
 
-        canAnswer: function(game, player) {
+        canAnswer: function (game, player) {
           const gd = game.data;
+
+          assert(player !== null);
+          assert(player !== undefined);
 
           // if they're a new player, set them up
           if (!gd.scores[player]) {
@@ -466,15 +470,10 @@ async function GetGameFSM() {
         return this.Guess(game, player, matchGuess[1]);
       }
 
-      // wagers start with $, and can contain commas or periods. if they're not a number after that
-      // then don't accept it as a wager
-      if (command.startsWith('$')) {
-        const amount = parseInt(command.replace(/(\$|,|\.)/gmi, ''), 10);
-
-        if (isNaN(amount)) {
-          return;
-        }
-
+      // wagers can contain $, commands, and periods. double test here because parseInt
+      // will detect '3 for 300' as a wager
+      const amount = parseInt(command.replace(/(\$|,|\.)/gmi, ''), 10);
+      if (/[a-z]/mi.test(command) === false & !isNaN(amount)) {
         return this.Wager(game, player, amount);
       }
 
@@ -482,7 +481,8 @@ async function GetGameFSM() {
         return this.Wager(game, player, game.data.scores[player]);
       }
 
-      // if command contains "for" see if words before are a category and after is a number, handle as category selection
+      // if command contains "for" see if words before are a category and after is a
+      // number, handle as category selection
       if (!game.options.autoPickQuestions) {
         const matchSelection = /(.*) for \$?(\d*)/gmi.exec(command);
         if (!matchSelection) {
