@@ -34,7 +34,7 @@ const rulesPresets = {
   },
 
   buzz: {
-    description: '(Very WIP!) Join a voice channel and use your push to talk or say "." to buzz in before answering.',
+    description: '(Very WIP!) Join a voice channel and use your push to talk or type "." to buzz in before answering.',
     options: { useBuzzer: true }
   }
 };
@@ -69,33 +69,41 @@ function renderBoard(game) {
   return board;
 }
 
-async function renderLifetimeStats(client, stats) {
+async function renderLifetimeStats(client, stats, members) {
   const earnings = Object.entries(stats)
-    .sort((a, b) => b[1].earnings - a[1].earnings)
-    .slice(0, 10);
+    .map(o => [o[0], o[1].earnings])
+    .sort((a, b) => b[1] - a[1]);
 
   const accuracy = Object.entries(stats)
-    .sort((a, b) => b[1].accuracy - a[1].accuracy)
-    /*.filter(o => o.correct + o.wrong >= 10).*/
-    .slice(0, 10);
+    .filter(o => o[1].correct + o[1].wrong >= 20)
+    .map(o => [o[0], o[1].accuracy])
+    .sort((a, b) => b[1] - a[1]);
 
   const embed = new Discord.RichEmbed()
     .setTitle("Hall of Fame")
     .setColor(0x000d8b);
 
-  let earningsStr = '';
-  for (const score of earnings) {
-    const user = await client.fetchUser(score[0]);
-    earningsStr += `${user}: $${score[1].earnings}\n`;
-  }
-  embed.addField('Earnings', earningsStr, true);
+  const boards = [['Earnings', earnings], ['Accuracy', accuracy]];
 
-  let accuracyStr = '';
-  for (const score of accuracy) {
-    const user = await client.fetchUser(score[0]);
-    accuracyStr += `${user}: ${score[1].accuracy.toFixed(1)}%\n`;
+  for (const board of boards) {
+    let boardStr = '';
+    const filteredBoard = board[1].filter(score => members.get(score[0]) !== undefined).slice(0, 10);
+    for (const score of filteredBoard) {
+      const user = await client.fetchUser(score[0]);
+      boardStr += `${user}: $${score[1]}\n`;
+    }
+    embed.addField('Local ' + board[0], boardStr.length ? boardStr : 'No local players', true);
   }
-  embed.addField('Accuracy', accuracyStr, true);
+
+  for (const board of boards) {
+    let boardStr = '';
+    const filteredBoard = board[1].slice(0, 10);
+    for (const score of filteredBoard) {
+      const user = await client.fetchUser(score[0]);
+      boardStr += `${user.tag}: $${score[1]}\n`;
+    }
+    embed.addField('Global ' + board[0], boardStr.length ? boardStr : 'No global players', true);
+  } 
 
   return embed;
 }
@@ -209,7 +217,12 @@ async function main() {
           break;
         }
 
-        const newGame = { channel: msg.channel, options: rulesPresets[args[1]].options };
+        const newGame = {
+          channel: msg.channel,
+          boardMessage: null,
+          questionMessage: null,
+          options: rulesPresets[args[1]].options
+        };
 
         if (args[1] === 'buzz') {
           if (!msg.member.voiceChannel) {
@@ -228,7 +241,7 @@ async function main() {
       }
 
       case '!stats': {
-        const statsEmbed = await renderLifetimeStats(client, stats);
+        const statsEmbed = await renderLifetimeStats(client, stats, msg.channel.members);
         msg.reply(statsEmbed);
         break;
       }
@@ -340,17 +353,6 @@ async function main() {
     }
   });
 
-  JepFSM.on('onBuzz', async ev => {
-    const embed = await renderQuestion(ev.game, client);
-
-    if (ev.game.boardMessage) {
-      ev.game.boardMessage.edit(embed);
-    } else {
-      const msg = await ev.game.channel.send(embed);
-      ev.game.boardMessage = msg;
-    }
-  });
-
   JepFSM.on('askWager', async ev => {
     if (ev.type === 'dailydouble') {
       const player = Object.keys(ev.wagers)[0];
@@ -364,19 +366,25 @@ async function main() {
 
   JepFSM.on('askQuestion', async ev => {
     const embed = await renderQuestion(ev.game, client);
+    const msg = await ev.game.channel.send(embed);
+    ev.game.questionMessage = msg;
+  });
 
-    if (ev.game.boardMessage) {
-      ev.game.boardMessage.edit(embed);
+  JepFSM.on('onBuzz', async ev => {
+    const embed = await renderQuestion(ev.game, client);
+
+    if (ev.game.questionMessage) {
+      ev.game.questionMessage.edit(embed);
     } else {
       const msg = await ev.game.channel.send(embed);
-      ev.game.boardMessage = msg;
+      ev.game.questionMessage = msg;
     }
   });
 
   JepFSM.on('rightAnswer', async ev => {
     const user = await client.fetchUser(ev.player);
     const embed = simpleEmbed('Correct!', `${user} guessed "${ev.question.answer}" correctly.`);
-    ev.game.boardMessage = null;
+    ev.game.questionMessage = null;
     ev.game.channel.send(embed);
     updateStats(stats, ev.player, true, ev.question.cost);
   });
@@ -387,18 +395,18 @@ async function main() {
     if (ev.game.options.useBuzzer) {
       const embed = await renderQuestion(ev.game, client);
 
-      if (ev.game.boardMessage) {
-        ev.game.boardMessage.edit(embed);
+      if (ev.game.questionMessage) {
+        ev.game.questionMessage.edit(embed);
       } else {
         const msg = await ev.game.channel.send(embed);
-        ev.game.boardMessage = msg;
+        ev.game.questionMessage = msg;
       }
     }
   });
 
   JepFSM.on('noAnswer', ev => {
     const embed = simpleEmbed("Time's up!", `The answer is "${ev.question.answer}"`);
-    ev.game.boardMessage = null;
+    ev.game.questionMessage = null;
     ev.game.channel.send(embed);
   });
 
