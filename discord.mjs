@@ -73,7 +73,7 @@ async function renderLifetimeStats(client, stats, members) {
   const earnings = Object.entries(stats)
     .map(o => [o[0], o[1].earnings])
     .sort((a, b) => b[1] - a[1])
-    .map(o => [o[0], '$'+ o[1].toFixed(1)]);
+    .map(o => [o[0], '$'+ o[1]]);
 
 
   const accuracy = Object.entries(stats)
