@@ -72,12 +72,15 @@ function renderBoard(game) {
 async function renderLifetimeStats(client, stats, members) {
   const earnings = Object.entries(stats)
     .map(o => [o[0], o[1].earnings])
-    .sort((a, b) => b[1] - a[1]);
+    .sort((a, b) => b[1] - a[1])
+    .map(o => [o[0], '$'+ o[1].toFixed(1)]);
+
 
   const accuracy = Object.entries(stats)
     .filter(o => o[1].correct + o[1].wrong >= 20)
     .map(o => [o[0], o[1].accuracy])
-    .sort((a, b) => b[1] - a[1]);
+    .sort((a, b) => b[1] - a[1])
+    .map(o => [o[0], o[1].toFixed(1) + '%']);
 
   const embed = new Discord.RichEmbed()
     .setTitle("Hall of Fame")
@@ -90,7 +93,7 @@ async function renderLifetimeStats(client, stats, members) {
     const filteredBoard = board[1].filter(score => members.get(score[0]) !== undefined).slice(0, 10);
     for (const score of filteredBoard) {
       const user = await client.fetchUser(score[0]);
-      boardStr += `${user}: $${score[1]}\n`;
+      boardStr += `${user}: ${score[1]}\n`;
     }
     embed.addField('Local ' + board[0], boardStr.length ? boardStr : 'No local players', true);
   }
@@ -100,7 +103,7 @@ async function renderLifetimeStats(client, stats, members) {
     const filteredBoard = board[1].slice(0, 10);
     for (const score of filteredBoard) {
       const user = await client.fetchUser(score[0]);
-      boardStr += `${user.tag}: $${score[1]}\n`;
+      boardStr += `${user.tag}: ${score[1]}\n`;
     }
     embed.addField('Global ' + board[0], boardStr.length ? boardStr : 'No global players', true);
   } 
