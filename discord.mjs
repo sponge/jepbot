@@ -100,7 +100,7 @@ async function renderLifetimeStats(client, stats, members) {
 
   for (const board of boards) {
     let boardStr = '';
-    const filteredBoard = board[1].slice(0, 10);
+    const filteredBoard = board[1].slice(0, 5);
     for (const score of filteredBoard) {
       const user = await client.fetchUser(score[0]);
       boardStr += `${user.tag}: ${score[1]}\n`;
