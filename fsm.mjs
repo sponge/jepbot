@@ -41,8 +41,8 @@ async function GetGameFSM() {
       numCategoriesPerRound: 6,       // number of categories selected per round
       numDailyDoublesPerRound: 2,     // number of daily doubles to randomly distribute through the board. 0 to disable
       wagerTime: 15000,               // how long a player has to wager for daily double/final jeopardy
-      useBuzzer: false,
-      buzzerQuestionTime: 8000,
+      useBuzzer: false,               // make players buzz in before accepting guesses
+      buzzerQuestionTime: 8000,       // how long questions last when the buzzer is enabled. questionTime is used for giving your answer still
     },
 
     states: {
