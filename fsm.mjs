@@ -288,7 +288,7 @@ async function GetGameFSM() {
             // if we timeout, anyone who wagers on the question and hasn't answered automatically loses the money
             if (game.data.wagers !== null) {
               Object.entries(game.data.wagers)
-                .filter(wager => game.data.guesses[wager[0]] < game.options.guessesPerQuestion)
+                .filter(wager => !game.data.guesses[wager[0]] || game.data.guesses[wager[0]] < game.options.guessesPerQuestion)
                 .forEach(wager => game.data.scores[wager[0]] -= wager[1]);
             }
             // move on to the end of the answer
