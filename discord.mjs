@@ -216,7 +216,7 @@ async function main() {
         if (game) { break; }
         if (!args[1] || args[1] in rulesPresets === false) {
           const choices = Object.entries(rulesPresets).map(o => `**!jeopardy ${o[0]}**: ${o[1].description}`).join('\n');
-          msg.reply('\n' + choices);
+          msg.reply('\n' + choices + '\n\n' + 'Post issues and suggestions at <https://github.com/sponge/jepbot>');
           break;
         }
 
