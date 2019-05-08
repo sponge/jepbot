@@ -351,8 +351,7 @@ async function main() {
       ev.game.boardMessage.edit(embed);
       ev.game.boardMessage = null;
     } else {
-      const msg = await ev.game.channel.send(embed);
-      ev.game.boardMessage = msg;
+      ev.game.channel.send(embed);
     }
   });
 
