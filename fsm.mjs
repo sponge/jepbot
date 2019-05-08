@@ -154,10 +154,10 @@ async function GetGameFSM() {
           game.data.wagers = null;
 
           // if auto pick is on, find a question still enabled and just ask it immediately
-          this.emit('questionSelectReady', { game, board: game.data.board, player: game.data.boardControl });
           if (game.options.autoPickQuestions || game.data.questionsLeft === 1) {
             this.handle(game, 'chooseRandomQuestion');
           } else {
+            this.emit('questionSelectReady', { game, board: game.data.board, player: game.data.boardControl });
             game.data.timer = setTimeout(() => this.handle(game, 'chooseRandomQuestion'), game.options.chooseQuestionTime);
           }
         },
