@@ -186,7 +186,7 @@ function updateStats(stats, id, rightAnswer, amount) {
 
 async function main() {
   const JepFSM = await GetGameFSM();
-  const client = new Discord.Client();
+  const client = new Discord.Client({fetchAllMembers: true});
 
   let stats = {};
   try {
