@@ -12,6 +12,6 @@
     "lodash": "^4.17.11",
     "machina": "^4.0.2",
     "sqlite": "^3.0.3",
-    "sqlite3": "https://github.com/mapbox/node-sqlite3/tarball/master"
+    "sqlite3": "^5.0.2"
   }
 }
