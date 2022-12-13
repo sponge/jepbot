@@ -1,6 +1,7 @@
 import Config from './config.mjs';
 import GetGameFSM from './fsm.mjs';
-import Discord from 'discord.js';
+import { EmbedBuilder, GatewayIntentBits } from 'discord.js';
+import Discord from 'discord.js'; 
 import _ from 'lodash';
 
 import fs from 'fs';
@@ -43,7 +44,7 @@ async function renderScores(client, fsm, game) {
   const scores = [];
 
   for (const score of fsm.GetScores(game)) {
-    const user = await client.fetchUser(score[0]);
+    const user = await client.users.fetch(score[0]);
     const amount = score[1] < 0 ? `-$${Math.abs(score[1])}` : `$${score[1]}`;
     scores.push(`${user}: **${amount}**`);
   }
@@ -82,7 +83,7 @@ async function renderLifetimeStats(client, stats, members) {
     .sort((a, b) => b[1] - a[1])
     .map(o => [o[0], o[1].toFixed(1) + '%']);
 
-  const embed = new Discord.RichEmbed()
+  const embed = new EmbedBuilder()
     .setTitle("Hall of Fame")
     .setColor(0x000d8b);
 
@@ -92,20 +93,20 @@ async function renderLifetimeStats(client, stats, members) {
     let boardStr = '';
     const filteredBoard = board[1].filter(score => members.get(score[0]) !== undefined).slice(0, 10);
     for (const score of filteredBoard) {
-      const user = await client.fetchUser(score[0]);
+      const user = await client.users.fetch(score[0]);
       boardStr += `${user}: ${score[1]}\n`;
     }
-    embed.addField('Local ' + board[0], boardStr.length ? boardStr : 'No local players', true);
+    embed.addFields({ name: 'Local ' + board[0], value: boardStr.length ? boardStr : 'No local players', inline: true});
   }
 
   for (const board of boards) {
     let boardStr = '';
     const filteredBoard = board[1].slice(0, 5);
     for (const score of filteredBoard) {
-      const user = await client.fetchUser(score[0]);
+      const user = await client.users.fetch(score[0]);
       boardStr += `${user.tag}: ${score[1]}\n`;
     }
-    embed.addField('Global ' + board[0], boardStr.length ? boardStr : 'No global players', true);
+    embed.addFields({ name: 'Global ' + board[0], value: boardStr.length ? boardStr : 'No global players', inline: true});
   } 
 
   return embed;
@@ -118,7 +119,7 @@ async function renderBoardMessage(client, fsm, game) {
   board += renderBoard(game);
 
   if (!gd.question) {
-    const user = await client.fetchUser(gd.boardControl);
+    const user = await client.users.fetch(gd.boardControl);
     board += `${user}, select a question.`;
 
     // don't show help text the whole game
@@ -126,7 +127,7 @@ async function renderBoardMessage(client, fsm, game) {
       board += '\nSelect a category by saying "`(number)` for `(value)`."';
     }
   } else {
-    const user = await client.fetchUser(gd.boardControl);
+    const user = await client.users.fetch(gd.boardControl);
     board += `${user} selected ${gd.question.category} for $${gd.question.cost}`;
   }
 
@@ -145,7 +146,7 @@ async function renderQuestion(game, client) {
   if (gd.wagers !== null) {
     const wagers = Object.entries(gd.wagers);
     for (let wager of wagers) {
-      wager[0] = await client.fetchUser(wager[0]);
+      wager[0] = await client.users.fetch(wager[0]);
     }
     question += '**Wagers**: ';
     question += wagers.map(w => `${w[0]}: $${w[1]}`).join(', ');
@@ -156,7 +157,7 @@ async function renderQuestion(game, client) {
   if (game.options.useBuzzer && !gd.buzzPlayer && !gd.wagers) {
     question += '\n\n**BUZZ IN NOW!**';
   } else if (gd.buzzPlayer) {        
-    const user = await client.fetchUser(gd.buzzPlayer);
+    const user = await client.users.fetch(gd.buzzPlayer);
     question += `\n\n${user}, please give your answer.`;
   }
 
@@ -164,7 +165,7 @@ async function renderQuestion(game, client) {
 }
 
 function simpleEmbed(title, description) {
-  return new Discord.RichEmbed()
+  return new EmbedBuilder()
     .setTitle(title)
     .setColor(0x000d8b)
     .setDescription(description);
@@ -186,7 +187,15 @@ function updateStats(stats, id, rightAnswer, amount) {
 
 async function main() {
   const JepFSM = await GetGameFSM();
-  const client = new Discord.Client({fetchAllMembers: true});
+  const client = new Discord.Client({
+    fetchAllMembers: true,
+    intents: [
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.MessageContent,
+      GatewayIntentBits.GuildMembers,
+    ],
+  });
 
   let stats = {};
   try {
@@ -202,7 +211,7 @@ async function main() {
     console.log(`Logged in as ${client.user.tag}!`);
   });
 
-  client.on('message', async msg => {
+  client.on('messageCreate', async msg => {
     const game = games[msg.channel.id];
 
     if (msg.author.bot) {
@@ -245,7 +254,7 @@ async function main() {
 
       case '!stats': {
         const statsEmbed = await renderLifetimeStats(client, stats, msg.channel.members);
-        msg.reply(statsEmbed);
+        msg.reply({ embeds: [statsEmbed] });
         break;
       }
 
@@ -253,7 +262,7 @@ async function main() {
         if (!game) { break; }
         const scores = await renderScores(client, JepFSM, game);
         const embed = simpleEmbed('Scores', scores);
-        game.channel.send(embed);
+        game.channel.send({ embeds: [embed] });
         break;
       }
 
@@ -261,17 +270,17 @@ async function main() {
         if (!game) { break; }
         const board = renderBoard(game);
         const embed = simpleEmbed(`Round ${game.data.round}`, board);
-        game.channel.send(embed);
+        game.channel.send({ embeds: [embed] });
         break;
       }
 
       case '!status': {
         if (msg.author.tag !== 'sponge#6969') { break; }
         let status = '\n';
-        status += `Running in ${client.guilds.size} servers\n`;
+        status += `Running in ${client.guilds.cache.size} servers\n`;
         status += `Currently ${Object.keys(games).length} active games.\n`;
         Object.entries(games).forEach(game => {
-          const channel = client.channels.get(game[0]);
+          const channel = client.channels.cache.get(game[0]);
           status += `${channel.guild.name} - #${channel.name}: Round ${game[1].data.round} of ${game[1].options.numRounds}, ${game[1].data.questionsLeft} questions left\n`;
         });
 
@@ -283,8 +292,9 @@ async function main() {
         if (msg.author.tag !== 'sponge#6969') { break; }
         if (!args[1]) { break; }
         Object.entries(games).forEach(game => {
-          const channel = client.channels.get(game[0]);
-          channel.send(simpleEmbed("Announcement from Alex Trebek", args.slice(1).join(' ')));
+          const channel = client.channels.cache.get(game[0]);
+          const embed = simpleEmbed("Announcement from Alex Trebek", args.slice(1).join(' '));
+          channel.send({embeds: [embed] });
         });
         break;
       }
@@ -330,7 +340,7 @@ async function main() {
   JepFSM.on('roundStart', async ev => {
     const board = renderBoard(ev.game);
     const embed = simpleEmbed(`Round ${ev.round}`, board);
-    ev.game.boardMessage = await ev.game.channel.send(embed);
+    ev.game.boardMessage = await ev.game.channel.send({embeds: [embed] });
   });
 
   JepFSM.on('questionSelectReady', async ev => {
@@ -339,7 +349,7 @@ async function main() {
     if (ev.game.boardMessage) {
       ev.game.boardMessage.edit(embed);
     } else {
-      const msg = await ev.game.channel.send(embed);
+      const msg = await ev.game.channel.send({embeds: [embed] });
       ev.game.boardMessage = msg;
     }
   });
@@ -348,27 +358,27 @@ async function main() {
     const embed = await renderBoardMessage(client, JepFSM, ev.game);
   
     if (ev.game.boardMessage) {
-      ev.game.boardMessage.edit(embed);
+      ev.game.boardMessage.edit({embeds: [embed] });
       ev.game.boardMessage = null;
     } else {
-      ev.game.channel.send(embed);
+      ev.game.channel.send({embeds: [embed] });
     }
   });
 
   JepFSM.on('askWager', async ev => {
     if (ev.type === 'dailydouble') {
       const player = Object.keys(ev.wagers)[0];
-      const user = await client.fetchUser(player);
+      const user = await client.users.fetch(player);
       const range = JepFSM.GetValidWagerRange(ev.game, player);
       const embed = simpleEmbed('Daily Double!', `${user}, say the dollar amount you wish to wager. You can wager between $${range[0]} and $${range[1]}`);
 
-      ev.game.channel.send(embed);
+      ev.game.channel.send({embeds: [embed] });
     }
   });
 
   JepFSM.on('askQuestion', async ev => {
     const embed = await renderQuestion(ev.game, client);
-    const msg = await ev.game.channel.send(embed);
+    const msg = await ev.game.channel.send({embeds: [embed] });
     ev.game.questionMessage = msg;
   });
 
@@ -376,18 +386,18 @@ async function main() {
     const embed = await renderQuestion(ev.game, client);
 
     if (ev.game.questionMessage) {
-      ev.game.questionMessage.edit(embed);
+      ev.game.questionMessage.edit({embeds: [embed] });
     } else {
-      const msg = await ev.game.channel.send(embed);
+      const msg = await ev.game.channel.send({embeds: [embed] });
       ev.game.questionMessage = msg;
     }
   });
 
   JepFSM.on('rightAnswer', async ev => {
-    const user = await client.fetchUser(ev.player);
+    const user = await client.users.fetch(ev.player);
     const embed = simpleEmbed('Correct!', `${user} guessed "${ev.question.answer}" correctly.`);
     ev.game.questionMessage = null;
-    ev.game.channel.send(embed);
+    ev.game.channel.send({embeds: [embed] });
     updateStats(stats, ev.player, true, ev.question.cost);
   });
 
@@ -398,9 +408,9 @@ async function main() {
       const embed = await renderQuestion(ev.game, client);
 
       if (ev.game.questionMessage) {
-        ev.game.questionMessage.edit(embed);
+        ev.game.questionMessage.edit({embeds: [embed] });
       } else {
-        const msg = await ev.game.channel.send(embed);
+        const msg = await ev.game.channel.send({embeds: [embed] });
         ev.game.questionMessage = msg;
       }
     }
@@ -409,13 +419,13 @@ async function main() {
   JepFSM.on('noAnswer', ev => {
     const embed = simpleEmbed("Time's up!", `The answer is "${ev.question.answer}"`);
     ev.game.questionMessage = null;
-    ev.game.channel.send(embed);
+    ev.game.channel.send({embeds: [embed] });
   });
 
   JepFSM.on('roundOver', async ev => {
     const scores = await renderScores(client, JepFSM, ev.game);
     const embed = simpleEmbed('Round over!', scores);
-    ev.game.channel.send(embed);
+    ev.game.channel.send({embeds: [embed] });
   });
 
   JepFSM.on('gameOver', async ev => {
@@ -423,7 +433,7 @@ async function main() {
 
     const scores = await renderScores(client, JepFSM, ev.game);
     const embed = simpleEmbed('Game Over!', `${scores}\nThanks for playing!`);
-    ev.game.channel.send(embed);
+    ev.game.channel.send({embeds: [embed] });
   });
 
   client.login(Config.token);
